@@ -167,6 +167,9 @@
   .tab.active { color: var(--accent); }
   .auth-error { background: var(--danger-soft); color: var(--danger); padding: 0.7rem 0.85rem; border-radius: 4px; font-size: 0.8125rem; margin-bottom: 1rem; }
   .helper { font-size: 0.75rem; color: var(--muted); margin-top: 0.375rem; line-height: 1.6; }
+  .auth-foot { margin-top: 1.4rem; text-align: center; font-size: 0.8125rem; }
+  .auth-foot a { color: var(--muted); }
+  .auth-foot a:hover { color: var(--accent); }
 
   /* APP */
   .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -538,6 +541,10 @@
 
       <button type="submit" class="primary" id="submitBtn">ログイン</button>
     </form>
+
+    <div class="auth-foot">
+      <a href="/privacy">プライバシーの仕組み</a>
+    </div>
   </div>
 </div>
 
