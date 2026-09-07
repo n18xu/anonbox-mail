@@ -335,6 +335,7 @@
   }
   dialog.show { opacity: 1; transform: translateY(0) scale(1); }
   dialog[open] { display: flex; flex-direction: column; }
+  dialog:focus, dialog:focus-visible { outline: none; }
   .modal-head, .modal-actions { flex-shrink: 0; }
   .mail-head { padding: 0.25rem 0.5rem; }
   .mail-delete { color: var(--muted); }
@@ -409,6 +410,19 @@
   #pwChangeForm .field:last-of-type { margin-bottom: 1rem; }
   #accountModal .modal-body { white-space: normal; }
   #accountModal .field label { margin-bottom: 0.4rem; }
+  .source-link {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); text-decoration: none;
+    transition: background 0.12s ease-out;
+  }
+  .source-link:hover { background: var(--hover); }
+  .source-link > svg:first-child { width: 22px; height: 22px; flex-shrink: 0; }
+  .source-text { flex: 1; min-width: 0; }
+  .source-title { font-size: 0.875rem; font-weight: 500; }
+  .source-note { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+  .source-arrow { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
 
   .migrate-banner {
     display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
@@ -500,7 +514,7 @@
         <label>メールアドレス</label>
         <div class="address-field">
           <input id="addressInput" type="text" autocomplete="username" placeholder="abc123" required>
-          <div class="domain">@<span id="domainText">xiefy.site</span></div>
+          <div class="domain">@<span id="domainText">anonbox.email</span></div>
         </div>
       </div>
 
@@ -715,6 +729,23 @@
       <div class="helper" id="accPwHelper">この端末に保存されているパスワードです。サーバーには暗号化されたハッシュのみが保存されています。</div>
     </div>
 
+    <hr class="section-sep">
+
+    <a class="source-link" id="sourceLink" href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 .5C5.73.5.7 5.53.7 11.8c0 4.99 3.24 9.22 7.73 10.71.57.1.78-.24.78-.55v-1.94c-3.14.69-3.81-1.51-3.81-1.51-.52-1.31-1.26-1.66-1.26-1.66-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.74.4-1.24.72-1.53-2.51-.28-5.15-1.25-5.15-5.58 0-1.23.44-2.24 1.16-3.03-.12-.28-.5-1.43.11-2.98 0 0 .95-.3 3.11 1.16a10.8 10.8 0 0 1 5.66 0c2.16-1.46 3.1-1.16 3.1-1.16.62 1.55.23 2.7.12 2.98.73.79 1.16 1.8 1.16 3.03 0 4.34-2.65 5.29-5.17 5.57.41.35.77 1.04.77 2.1v3.11c0 .31.2.66.79.55 4.48-1.5 7.71-5.72 7.71-10.71C23.3 5.53 18.27.5 12 .5z"/>
+      </svg>
+      <div class="source-text">
+        <div class="source-title">ソースコードを読む</div>
+        <div class="source-note">このサービスの全コードを GitHub で公開しています</div>
+      </div>
+      <svg class="source-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+    </a>
+
     <form id="pwChangeForm" class="hidden">
       <hr class="section-sep">
       <div id="pwChangeError" class="auth-error hidden"></div>
@@ -774,7 +805,7 @@ const state = {
   tab: "login",
   token: localStorage.getItem("xiefy_token") || null,
   address: localStorage.getItem("xiefy_addr") || null,
-  domain: "xiefy.site",
+  domain: "anonbox.email",
   pollTimer: null,
   timeTimer: null,
   lastMsgSig: null,
@@ -1694,6 +1725,10 @@ document.addEventListener("keydown", (ev) => {
 function openModal(id = "modal") {
   const dlg = $(id);
   dlg.showModal();
+  // the browser auto-focuses the first button, which paints a focus ring on open;
+  // hold focus on the dialog itself so keyboard users still land inside it
+  dlg.tabIndex = -1;
+  try { dlg.focus({ preventScroll: true }); } catch (e) { dlg.focus(); }
   requestAnimationFrame(() => requestAnimationFrame(() => dlg.classList.add("show")));
 }
 
