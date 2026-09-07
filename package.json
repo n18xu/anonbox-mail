@@ -14,7 +14,7 @@
     "wrangler": "^4.94.0"
   },
   "dependencies": {
-    "dompurify": "^3.2.4",
+    "dompurify": "^3.4.15",
     "postal-mime": "^2.7.4"
   }
 }

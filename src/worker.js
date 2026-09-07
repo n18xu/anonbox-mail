@@ -1,9 +1,26 @@
 import PostalMime from "postal-mime";
 
+// D1 caps a row at ~2 MB and base64 inflates by 4/3, so cap the plaintext first
+const MAX_BODY_CHARS = 900000;
+const TRUNCATED_NOTE = "\n\n[このメールは大きすぎるため、以降は省略されました]";
+const TRUNCATED_NOTE_HTML = "<p>[このメールは大きすぎるため、以降は省略されました]</p>";
+
+function limitBody(text, html) {
+  let t = text || null;
+  let h = html || null;
+  const size = () => (t ? t.length : 0) + (h ? h.length : 0);
+  if (size() <= MAX_BODY_CHARS) return { text: t, html: h, truncated: false };
+  if (t && t.length > 50000) t = t.slice(0, 50000) + TRUNCATED_NOTE;
+  if (h && size() > MAX_BODY_CHARS) {
+    h = h.slice(0, Math.max(0, MAX_BODY_CHARS - (t ? t.length : 0))) + TRUNCATED_NOTE_HTML;
+  }
+  return { text: t, html: h, truncated: true };
+}
+
 const DOMAIN = "anonbox.email";         // primary domain shown to users
 const LEGACY_DOMAINS = ["xiefy.site"];  // old domains that keep receiving / logging in
 const ALL_DOMAINS = [DOMAIN, ...LEGACY_DOMAINS];
-const SESSION_TTL_MS = 100 * 365 * 24 * 3600 * 1000;
+const SESSION_TTL_MS = 90 * 24 * 3600 * 1000;
 const PBKDF2_ITERATIONS = 100000;
 
 const CORS = {
@@ -136,13 +153,23 @@ async function getAuthAccount(req, env) {
   const token = m[1].trim();
   const now = Date.now();
   const session = await env.DB.prepare(
-    `SELECT s.account_id, a.address, a.inbox, a.created_at
+    `SELECT s.account_id, s.expires_at, a.address, a.inbox, a.created_at
      FROM sessions s JOIN accounts a ON a.id = s.account_id
      WHERE s.token = ? AND s.expires_at > ?`
   )
     .bind(token, now)
     .first();
-  return session ? { ...session, token } : null;
+  if (!session) return null;
+
+  // sliding expiry: active sessions keep working, forgotten ones lapse.
+  // also clamps the old never-expiring sessions down to the current window.
+  const target = now + SESSION_TTL_MS;
+  if (session.expires_at > target || session.expires_at - now < SESSION_TTL_MS / 2) {
+    await env.DB.prepare(`UPDATE sessions SET expires_at = ? WHERE token = ?`)
+      .bind(target, token)
+      .run();
+  }
+  return { ...session, token };
 }
 
 async function createSession(env, accountId) {
@@ -194,9 +221,11 @@ async function encryptMailForAccount(publicKeyB64, parsed, fromObj, toAddress) {
   );
 
   const bodyIv = crypto.getRandomValues(new Uint8Array(12));
+  const limited = limitBody(parsed.text, parsed.html);
+  if (limited.truncated) console.warn("mail body truncated to fit the row limit");
   const bodyPlain = JSON.stringify({
-    text: parsed.text || null,
-    html: parsed.html || null,
+    text: limited.text,
+    html: limited.html,
   });
   const bodyEncrypted = new Uint8Array(
     await crypto.subtle.encrypt(
@@ -409,21 +438,28 @@ export default {
     const encrypted = await encryptMailForAccount(account.public_key, parsed, from, toAddress);
 
     const msgId = crypto.randomUUID();
-    await env.DB.prepare(
-      `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        msgId,
-        account.id,
-        encrypted.encrypted_aes_key,
-        encrypted.meta_iv,
-        encrypted.meta_encrypted,
-        encrypted.body_iv,
-        encrypted.body_encrypted,
-        Date.now()
+    try {
+      await env.DB.prepare(
+        `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run();
+        .bind(
+          msgId,
+          account.id,
+          encrypted.encrypted_aes_key,
+          encrypted.meta_iv,
+          encrypted.meta_encrypted,
+          encrypted.body_iv,
+          encrypted.body_encrypted,
+          Date.now()
+        )
+        .run();
+    } catch (e) {
+      // bouncing is better than swallowing the mail without telling anyone
+      console.error("failed to store mail", e?.message || String(e));
+      message.setReject?.("temporary storage failure, please retry");
+      return;
+    }
 
     ctx.waitUntil(
       pushToAccount(env, account.id, {
@@ -440,6 +476,15 @@ export default {
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM messages WHERE received_at < ?`).bind(cutoff),
       env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(Date.now()),
+      env.DB.prepare(
+        `DELETE FROM aliases WHERE account_id NOT IN (SELECT id FROM accounts)`
+      ),
+      env.DB.prepare(
+        `DELETE FROM push_subscriptions WHERE account_id NOT IN (SELECT id FROM accounts)`
+      ),
+      env.DB.prepare(
+        `DELETE FROM messages WHERE account_id NOT IN (SELECT id FROM accounts)`
+      ),
     ]);
   },
 
@@ -737,7 +782,8 @@ export default {
 
       return err("not found", 404);
     } catch (e) {
-      return err("server error: " + (e.message || String(e)), 500);
+      console.error("request failed", path, e?.stack || e?.message || String(e));
+      return err("server error", 500);
     }
   },
 };

@@ -115,13 +115,29 @@
     color: var(--muted); overflow-x: auto; white-space: pre;
   }
   .flow b { color: var(--text); font-weight: 600; }
+  .flow-steps { display: none; }
+  .flow-steps li {
+    list-style: none; position: relative;
+    padding: 0 0 1.1rem 1.6rem;
+    border-left: 2px solid var(--border);
+    margin-left: 0.4rem;
+    font-size: 0.9375rem; line-height: 1.7;
+  }
+  .flow-steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .flow-steps li::before {
+    content: ""; position: absolute; left: -6px; top: 0.55rem;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--bg); border: 2px solid var(--border);
+  }
+  .flow-steps li.key::before { background: var(--accent); border-color: var(--accent); }
+  .flow-steps b { font-weight: 600; }
 
   table { width: 100%; border-collapse: collapse; margin-top: 0.9rem; font-size: 0.9375rem; }
   th, td { text-align: left; padding: 0.7rem 0.6rem; border-bottom: 1px solid var(--divider); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.8125rem; }
-  td.mark { white-space: nowrap; font-weight: 500; }
+  td.mark { font-weight: 500; }
   td.no { color: var(--success); }
-  td.yes { color: var(--muted); }
+  td.yes { color: var(--success); }
 
   ul.features { list-style: none; margin-top: 0.6rem; }
   ul.features li { padding: 0.55rem 0 0.55rem 1.6rem; position: relative; border-bottom: 1px solid var(--divider); }
@@ -158,6 +174,26 @@
     .hero { padding: 2.25rem 0 1.75rem; }
     .hero h1 { font-size: 1.5rem; }
     body { font-size: 14.5px; }
+
+    /* the ascii diagram needs sideways scrolling on a phone, so stack it instead */
+    .flow { display: none; }
+    .flow-steps { display: block; margin: 1.2rem 0 0.4rem; }
+
+    /* label above value instead of two cramped columns */
+    table, table tr, table td { display: block; width: 100%; }
+    table tr:first-child { display: none; }
+    table tr {
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--divider);
+    }
+    table tr:last-child { border-bottom: none; }
+    table td { border: none; padding: 0; }
+    table td:first-child { color: var(--muted); font-size: 0.8125rem; line-height: 1.6; }
+    table td.mark { margin-top: 0.15rem; font-size: 0.9375rem; }
+
+    .btn { display: block; text-align: center; }
+    .hero .cta { display: block; }
+    .hero .cta .btn + .btn { margin-top: 0.6rem; }
   }
 </style>
 </head>
@@ -200,6 +236,13 @@
                                      │
    ブラウザ ◀── 暗号文を取得 ─────────┘
       └ パスワード → 秘密鍵を復号 → <b>ここで初めて本文が読める</b></div>
+    <ol class="flow-steps">
+      <li>差出人があなたのアドレス宛にメールを送る</li>
+      <li>Cloudflare Email Routing がサーバーへ渡す</li>
+      <li class="key"><b>あなたの公開鍵で暗号化</b>してからデータベースに保存（この時点で運営者にも読めません）</li>
+      <li>ブラウザが暗号文のまま受け取る</li>
+      <li class="key">パスワードから秘密鍵を開き、<b>あなたの端末の中だけで復号</b></li>
+    </ol>
     <p>
       メールが届くと、サーバーは本文・件名・差出人を使い捨ての AES-256-GCM 鍵で暗号化し、
       その鍵をあなたの公開鍵で暗号化して保存します。データベースに残るのは暗号文だけです。
