@@ -7,11 +7,11 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1f2023" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
-<title>プライバシーの仕組み — AnonBox Mail</title>
-<meta name="description" content="AnonBox Mail は、届いたメールが保存される前に暗号化される使い捨てメールサービスです。復号鍵はあなたのブラウザから出ないため、運営者もメールを読めません。全ソースコードを公開しています。">
-<meta property="og:title" content="運営者にも読めないメールボックス — AnonBox Mail">
-<meta property="og:description" content="受信メールは保存される前に暗号化。復号鍵はブラウザの外に出ません。登録に個人情報は不要、全コードを公開しています。">
-<meta property="og:url" content="https://anonbox.email/privacy">
+<title>支援のお願い — AnonBox Mail</title>
+<meta name="description" content="AnonBox Mail は広告も課金もなく、皆さまの支援で運営しています。USDT・Bitcoin・Monero でのご寄付を受け付けています。">
+<meta property="og:title" content="AnonBox Mail を支援する">
+<meta property="og:description" content="広告も課金もありません。サーバー代とドメイン代は皆さまの支援でまかなっています。">
+<meta property="og:url" content="https://anonbox.email/donations">
 <meta property="og:type" content="website">
 <style>
   :root {
@@ -263,166 +263,101 @@
 <main>
 
   <div class="hero">
-    <h1>運営者にも読めない、<br>使い捨てのメールボックス。</h1>
+    <h1>支援のお願い</h1>
     <p class="lead">
-      AnonBox は、届いたメールが<strong>サーバーに保存される前に暗号化される</strong>使い捨てメールサービスです。
-      復号に必要な鍵はあなたのブラウザから出ないため、運営者がメールの中身を読むことはできません。
-      そして、その主張を確かめられるように<strong>全ソースコードを公開</strong>しています。
+      AnonBox は広告も課金もありません。<strong>このサービスは皆さまの支援で成り立っています。</strong>
+      いただいたご支援は、サーバー代とドメイン代にあてさせていただきます。
+      金額の大小にかかわらず、本当に助かります。
     </p>
-    <div class="cta">
-      <button class="btn ghost more" id="moreBtn" type="button">
-        詳しく読む
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </button>
-      <a class="btn primary" href="/">無料でアドレスを作る</a>
-      <a class="btn ghost" href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">ソースコードを見る</a>
-      <a class="btn ghost donate" href="/donations">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-        寄付する
-      </a>
-    </div>
   </div>
 
-  <div id="detail" hidden>
   <section>
-    <h2>なぜ「読めない」のか</h2>
-    <p>
-      アカウントを作るとき、あなたのブラウザの中で鍵ペア（RSA-OAEP 2048bit）が生成されます。
-      公開鍵だけがサーバーに送られ、秘密鍵は<strong>あなたのパスワードから作った鍵で暗号化してから</strong>保存されます。
-      サーバーが受け取るのは、開けられない金庫だけです。
-    </p>
-    <p>
-      <strong>パスワードそのものは、ログイン時もサーバーに送られません。</strong>
-      端末内でパスワードから 1 つのマスター鍵を作り（PBKDF2-SHA256・60万回）、そこから
-      「鍵を開けるための鍵」と「本人確認のための値」を別々に導出します。サーバーへ渡すのは後者だけで、
-      そこから鍵を開けることはできません。サーバーはさらにその値をハッシュ化して保存するので、
-      データベースが漏れてもログインには使えません。
-    </p>
-    <div class="flow">差出人 ──▶ Cloudflare Email Routing ──▶ サーバー ──▶ データベース
-                                     │              <b>暗号文のみ</b>
-                            <b>あなたの公開鍵で暗号化</b>
-                                     │
-   ブラウザ ◀── 暗号文を取得 ─────────┘
-      └ パスワード → 秘密鍵を復号 → <b>ここで初めて本文が読める</b></div>
-    <ol class="flow-steps">
-      <li>差出人があなたのアドレス宛にメールを送る</li>
-      <li>Cloudflare Email Routing がサーバーへ渡す</li>
-      <li class="key"><b>あなたの公開鍵で暗号化</b>してからデータベースに保存（この時点で運営者にも読めません）</li>
-      <li>ブラウザが暗号文のまま受け取る</li>
-      <li class="key">パスワードから秘密鍵を開き、<b>あなたの端末の中だけで復号</b></li>
-    </ol>
-    <p>
-      メールが届くと、サーバーは本文・件名・差出人を使い捨ての AES-256-GCM 鍵で暗号化し、
-      その鍵をあなたの公開鍵で暗号化して保存します。データベースに残るのは暗号文だけです。
-      あなたがログインすると、パスワードから鍵を導出して秘密鍵を開き、ブラウザの中だけでメールが復号されます。
+    <h2>寄付先</h2>
+      <div class="coins">
+      <div class="coin">
+        <div class="coin-head">
+          <span class="coin-name">USDT</span>
+          <span class="coin-chain">TRC20 (Tron)</span>
+        </div>
+        <div class="qr"><svg class="qr-svg" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33"><path stroke="#000" d="M2 2.5h7m1 0h2m5 0h2m2 0h2m1 0h7m-29 1h1m5 0h1m1 0h2m2 0h1m1 0h2m1 0h2m3 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m2 0h1m1 0h5m2 0h3m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m3 0h1m6 0h1m2 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m3 0h1m2 0h1m3 0h3m2 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h5m1 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h3m1 0h3m2 0h2m1 0h1m-21 1h1m1 0h2m1 0h3m3 0h4m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m-28 1h1m3 0h1m2 0h1m6 0h1m1 0h2m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m-28 1h3m1 0h5m4 0h1m1 0h1m1 0h1m1 0h1m2 0h4m-25 1h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m3 0h1m2 0h1m-21 1h5m1 0h2m5 0h1m2 0h1m4 0h1m1 0h3m-29 1h2m3 0h1m1 0h5m1 0h1m1 0h2m1 0h1m6 0h2m1 0h1m-29 1h5m1 0h3m2 0h1m2 0h1m2 0h1m1 0h1m2 0h7m-29 1h1m2 0h3m1 0h1m3 0h3m1 0h2m1 0h1m2 0h2m2 0h1m2 0h1m-28 1h2m3 0h1m1 0h1m2 0h2m3 0h1m1 0h2m3 0h3m2 0h1m-28 1h2m1 0h2m1 0h2m2 0h1m1 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m2 0h1m-29 1h1m1 0h2m1 0h4m1 0h1m4 0h1m2 0h1m1 0h1m2 0h1m-22 1h2m1 0h1m1 0h1m1 0h3m3 0h1m1 0h1m1 0h2m4 0h2m-26 1h1m1 0h2m1 0h1m2 0h1m2 0h2m1 0h1m2 0h8m1 0h2m-21 1h4m1 0h4m2 0h2m3 0h1m-25 1h7m1 0h1m2 0h1m1 0h1m2 0h1m3 0h1m1 0h1m1 0h1m2 0h1m-28 1h1m5 0h1m1 0h2m1 0h2m5 0h1m1 0h1m3 0h1m-25 1h1m1 0h3m1 0h1m3 0h1m3 0h1m2 0h2m1 0h5m2 0h1m-28 1h1m1 0h3m1 0h1m1 0h7m1 0h3m2 0h1m2 0h1m3 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m1 0h4m3 0h1m1 0h3m3 0h2m1 0h1m-29 1h1m5 0h1m2 0h1m1 0h1m8 0h2m2 0h2m1 0h1m-28 1h7m1 0h2m1 0h1m1 0h2m1 0h5m1 0h1m4 0h1"/></svg></div>
+        <div class="coin-addr">
+          <code id="addr-usdt">TKj9fpBJd7kF2B4rjS8NYmuWNZpS3SMZuy</code>
+          <button class="copy-btn" type="button" data-copy="usdt" aria-label="USDT のアドレスをコピー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="coin">
+        <div class="coin-head">
+          <span class="coin-name">Bitcoin</span>
+          <span class="coin-chain">BTC</span>
+        </div>
+        <div class="qr"><svg class="qr-svg" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33"><path stroke="#000" d="M2 2.5h7m1 0h4m2 0h1m4 0h2m1 0h7m-29 1h1m5 0h1m1 0h5m4 0h1m2 0h1m1 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m2 0h2m2 0h2m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h2m3 0h2m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h6m1 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h1m1 0h3m4 0h3m1 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h3m1 0h1m1 0h2m1 0h1m-18 1h1m1 0h2m1 0h3m1 0h1m1 0h1m2 0h5m3 0h1m2 0h1m1 0h2m-27 1h4m2 0h1m2 0h1m4 0h1m2 0h2m1 0h1m1 0h1m3 0h1m-28 1h1m2 0h3m2 0h1m1 0h2m3 0h2m7 0h3m-26 1h2m1 0h1m1 0h1m1 0h8m2 0h2m3 0h1m2 0h2m-28 1h1m3 0h3m1 0h1m1 0h3m3 0h1m5 0h1m2 0h2m-28 1h4m3 0h1m7 0h5m2 0h2m1 0h4m-27 1h1m1 0h1m1 0h2m2 0h3m1 0h1m1 0h2m1 0h3m1 0h1m2 0h1m1 0h1m-28 1h1m9 0h2m2 0h1m2 0h2m1 0h1m3 0h1m2 0h1m-28 1h2m1 0h4m1 0h2m1 0h2m1 0h1m2 0h1m5 0h2m-25 1h1m2 0h2m1 0h1m3 0h3m1 0h1m1 0h2m2 0h1m1 0h1m1 0h2m-27 1h1m1 0h1m2 0h5m2 0h1m1 0h2m1 0h2m2 0h1m2 0h1m-23 1h1m2 0h1m1 0h2m2 0h1m2 0h1m1 0h2m2 0h1m1 0h2m1 0h2m1 0h1m-28 1h1m4 0h1m1 0h1m3 0h1m1 0h1m2 0h2m1 0h5m1 0h1m1 0h1m-21 1h1m2 0h3m4 0h3m3 0h1m2 0h2m-29 1h7m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1m1 0h1m1 0h2m-28 1h1m5 0h1m1 0h1m4 0h1m4 0h3m3 0h2m-26 1h1m1 0h3m1 0h1m2 0h1m1 0h1m3 0h3m2 0h9m-29 1h1m1 0h3m1 0h1m1 0h2m2 0h4m1 0h3m1 0h1m2 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h2m8 0h1m-29 1h1m5 0h1m6 0h1m1 0h1m3 0h7m1 0h1m-28 1h7m1 0h1m4 0h1m1 0h1m2 0h1m1 0h1m2 0h3m1 0h1"/></svg></div>
+        <div class="coin-addr">
+          <code id="addr-btc">bc1qgxp5y0y92l2h383em6q4przguh54hkkh5pe6dh</code>
+          <button class="copy-btn" type="button" data-copy="btc" aria-label="Bitcoin のアドレスをコピー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="coin">
+        <div class="coin-head">
+          <span class="coin-name">Monero</span>
+          <span class="coin-chain">XMR</span>
+        </div>
+        <div class="qr"><svg class="qr-svg" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45"><path stroke="#000" d="M2 2.5h7m1 0h1m1 0h1m1 0h1m2 0h2m3 0h6m1 0h4m3 0h7m-41 1h1m5 0h1m2 0h1m3 0h1m2 0h1m1 0h2m1 0h2m1 0h3m1 0h4m2 0h1m5 0h1m-41 1h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m2 0h3m2 0h3m1 0h5m3 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h2m3 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h4m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h5m1 0h2m1 0h1m1 0h1m3 0h1m1 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h1m-41 1h1m5 0h1m1 0h1m1 0h1m4 0h1m2 0h4m3 0h1m2 0h4m2 0h1m5 0h1m-41 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-33 1h3m3 0h1m1 0h2m1 0h6m1 0h5m-31 1h1m3 0h1m1 0h3m4 0h1m1 0h2m2 0h2m1 0h2m1 0h1m1 0h1m1 0h1m3 0h5m2 0h1m-41 1h1m1 0h1m1 0h2m1 0h1m1 0h1m1 0h1m3 0h2m5 0h4m1 0h2m1 0h2m1 0h1m1 0h3m1 0h2m-40 1h3m2 0h1m1 0h1m1 0h1m2 0h2m1 0h2m2 0h2m1 0h1m1 0h1m1 0h1m6 0h2m4 0h1m-36 1h1m2 0h3m2 0h1m2 0h4m1 0h1m2 0h1m3 0h2m3 0h4m2 0h1m-40 1h5m1 0h3m1 0h3m2 0h1m4 0h1m1 0h2m5 0h1m2 0h2m2 0h1m2 0h1m-36 1h1m4 0h2m1 0h1m3 0h1m2 0h1m4 0h1m3 0h1m1 0h2m2 0h4m1 0h2m-40 1h6m1 0h2m2 0h1m6 0h1m1 0h1m1 0h2m2 0h1m1 0h2m1 0h6m2 0h1m-40 1h2m2 0h1m1 0h5m1 0h1m2 0h8m2 0h1m1 0h3m2 0h1m1 0h3m2 0h1m-41 1h2m1 0h2m1 0h5m4 0h2m3 0h3m2 0h1m2 0h2m3 0h1m5 0h1m-40 1h6m2 0h1m4 0h2m2 0h1m1 0h1m3 0h5m4 0h2m1 0h6m-38 1h1m2 0h4m1 0h1m1 0h1m1 0h2m1 0h1m1 0h6m1 0h1m2 0h1m3 0h1m1 0h2m1 0h2m-40 1h1m3 0h1m1 0h2m1 0h4m5 0h1m1 0h1m1 0h1m2 0h4m2 0h1m2 0h1m1 0h1m1 0h2m-41 1h4m2 0h1m1 0h2m2 0h4m7 0h4m1 0h2m3 0h1m2 0h3m1 0h1m-38 1h1m1 0h1m1 0h1m3 0h1m1 0h1m3 0h2m2 0h2m3 0h1m1 0h2m5 0h3m1 0h2m-41 1h1m1 0h2m2 0h2m1 0h1m1 0h2m2 0h1m1 0h1m2 0h5m2 0h2m1 0h1m2 0h1m4 0h3m-40 1h3m1 0h1m2 0h3m1 0h4m1 0h3m1 0h4m2 0h1m1 0h1m2 0h6m-38 1h3m1 0h1m1 0h1m7 0h1m1 0h2m1 0h3m2 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h2m-41 1h1m1 0h1m1 0h1m2 0h2m1 0h1m2 0h3m3 0h1m2 0h1m2 0h1m1 0h5m3 0h2m1 0h1m-39 1h1m1 0h2m1 0h2m1 0h1m3 0h3m2 0h2m4 0h1m3 0h2m1 0h1m1 0h2m1 0h4m1 0h1m-40 1h4m5 0h2m2 0h4m1 0h3m1 0h2m1 0h1m1 0h7m-34 1h2m2 0h3m1 0h3m1 0h1m3 0h3m1 0h4m3 0h3m2 0h1m1 0h2m2 0h2m-41 1h2m6 0h2m1 0h2m1 0h3m2 0h3m3 0h1m1 0h1m1 0h1m1 0h1m2 0h3m1 0h3m-38 1h1m1 0h2m3 0h2m1 0h2m5 0h1m4 0h5m2 0h3m2 0h1m2 0h1m-39 1h2m4 0h1m1 0h1m1 0h2m1 0h1m1 0h2m2 0h2m1 0h1m1 0h1m1 0h4m1 0h2m2 0h1m2 0h1m-41 1h3m3 0h1m1 0h2m1 0h1m1 0h3m1 0h1m1 0h2m1 0h2m1 0h1m1 0h1m3 0h6m3 0h1m-33 1h1m4 0h1m1 0h1m2 0h1m2 0h2m2 0h1m2 0h2m1 0h2m3 0h1m1 0h1m1 0h1m-41 1h7m1 0h1m3 0h1m1 0h1m1 0h2m5 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h1m1 0h1m-41 1h1m5 0h1m2 0h7m1 0h2m3 0h3m2 0h6m3 0h2m2 0h1m-41 1h1m1 0h3m1 0h1m1 0h2m3 0h2m1 0h1m1 0h2m2 0h1m1 0h3m2 0h1m1 0h7m-38 1h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h3m7 0h1m1 0h2m1 0h6m1 0h1m1 0h3m-40 1h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h2m2 0h2m2 0h1m1 0h3m1 0h2m1 0h2m1 0h1m4 0h1m1 0h1m-41 1h1m5 0h1m2 0h1m2 0h1m1 0h1m1 0h3m1 0h2m5 0h1m1 0h1m3 0h5m1 0h2m-41 1h7m1 0h2m1 0h2m2 0h1m2 0h2m1 0h1m2 0h2m3 0h1m2 0h2m2 0h2m1 0h1"/></svg></div>
+        <div class="coin-addr">
+          <code id="addr-xmr">872sbPoXSnNbceX2LN2X56KhYqh9uuZGADy2o4LYbqseMuGdsvAT9uqFfXXDL1eyQA9yGTY44nPkK3SoFzbiDhcYK6yj3As</code>
+          <button class="copy-btn" type="button" data-copy="xmr" aria-label="Monero のアドレスをコピー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      </div>
+      </div>
+    <p class="muted" style="font-size:0.8125rem;margin-top:1.2rem;">
+      送金前にアドレスを必ずご確認ください。ネットワークを間違えると資金は戻せません。
+      QR コードはこのページ内で生成しており、外部のサービスには一切アクセスしていません。
     </p>
   </section>
 
   <section>
-    <h2>サーバーに残るもの、残らないもの</h2>
-    <table>
-      <tr><th>項目</th><th>サーバー側での状態</th></tr>
-      <tr><td>メール本文・件名・差出人</td><td class="mark no">暗号文のみ（復号不可）</td></tr>
-      <tr><td>秘密鍵</td><td class="mark no">パスワード由来の鍵で暗号化済み</td></tr>
-      <tr><td>パスワード</td><td class="mark no">送信されません（端末で導出した値のハッシュのみ）</td></tr>
-      <tr><td>広告・トラッキング Cookie</td><td class="mark no">一切なし</td></tr>
-      <tr><td>登録時の個人情報</td><td class="mark no">要求しません（電話番号・本人確認なし）</td></tr>
-      <tr><td>アドレスと受信日時</td><td class="mark yes">保持します（配送に必要なため）</td></tr>
-    </table>
-    <p class="muted" style="margin-top:1rem;font-size:0.875rem;">
-      追跡目的の Cookie は使っていません。外部から読み込むスクリプトは、表示回数の統計に使う
-      Cloudflare の匿名アクセス解析（Cookie を使わず、個人を識別しません）が1つあるだけで、
-      広告ネットワークや第三者トラッカーは一切含まれていません。
-    </p>
-  </section>
-
-  <section>
-    <h2>できること</h2>
+    <h2>支援がなにに使われるか</h2>
     <ul class="features">
-      <li><b>匿名エイリアス</b>：15桁の数字アドレスを何個でも発行でき、すべて同じ受信箱に届きます。サービスごとに使い分けて、不要になったら削除できます。</li>
-      <li><b>認証コードの自動抽出</b>：ワンタイムパスワードを一覧から直接コピーできます。</li>
-      <li><b>検索と未読フィルタ</b>：復号済みの情報に対してブラウザ内で実行するため、検索内容がサーバーに送られることはありません。</li>
-      <li><b>まとめて削除</b>：複数選択して一括で消せます。</li>
-      <li><b>30日で自動削除</b>：受信から30日が過ぎたメールはサーバーから自動的に消えます。</li>
-      <li><b>安全な HTML 表示</b>：サニタイズしたうえで、スクリプトを無効にした隔離フレーム内に描画します。</li>
-      <li><b>PWA 対応</b>：ホーム画面に追加すればアプリのように使え、プッシュ通知も受け取れます。</li>
+      <li><b>サーバー代</b>：受信処理とデータベースの稼働費用</li>
+      <li><b>ドメイン代</b>：anonbox.email の維持</li>
+      <li><b>開発の継続</b>：機能追加とセキュリティ対応</li>
     </ul>
-  </section>
-
-  <section>
-    <h2>正直に伝えておくこと</h2>
-    <div class="note">
-      <h3>パスワードを忘れると復旧できません</h3>
-      <p class="muted">
-        秘密鍵はパスワードでしか開けません。運営者によるリセットも不可能です（ハッシュを差し替えても、鍵が開かないため過去のメールは読めなくなります）。
-        これは不便さと引き換えに、運営者が中身に触れられないことを保証する仕組みです。
-      </p>
-    </div>
-    <div class="note">
-      <h3>だからこそ、コードを公開しています</h3>
-      <p class="muted">
-        暗号化はブラウザ上で行われますが、そのブラウザに配信されるコードを用意しているのは運営者です。
-        「読めないはずだ」と言葉で言うだけでは意味がないので、実際に動いているコードをすべて公開し、誰でも検証できるようにしています。
-      </p>
-    </div>
-    <div class="note">
-      <h3>パスワードは端末内に保存されます</h3>
-      <p class="muted">
-        設定画面でパスワードを再表示できるようにするため、この端末のブラウザ内（IndexedDB）に保存しています。サーバーには送られません。共用の端末では利用を避け、使い終わったらログアウトしてください。
-      </p>
-    </div>
-  </section>
-
-  <section>
-    <h2>検証してください</h2>
-    <p class="muted">
-      サーバー側の処理も、ブラウザ側の暗号処理も、すべてこのリポジトリにあります。
-      自分のドメインで同じものを動かすこともできます（MIT ライセンス）。
+    <p class="muted" style="margin-top:1rem;">
+      寄付をしなくても、機能はすべて無料で使えます。制限も広告も入りません。
+      <a href="/privacy">プライバシーの仕組み</a>もあわせてご覧ください。
     </p>
-    <a class="code-link" href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.7 5.53.7 11.8c0 4.99 3.24 9.22 7.73 10.71.57.1.78-.24.78-.55v-1.94c-3.14.69-3.81-1.51-3.81-1.51-.52-1.31-1.26-1.66-1.26-1.66-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.74.4-1.24.72-1.53-2.51-.28-5.15-1.25-5.15-5.58 0-1.23.44-2.24 1.16-3.03-.12-.28-.5-1.43.11-2.98 0 0 .95-.3 3.11 1.16a10.8 10.8 0 0 1 5.66 0c2.16-1.46 3.1-1.16 3.1-1.16.62 1.55.23 2.7.12 2.98.73.79 1.16 1.8 1.16 3.03 0 4.34-2.65 5.29-5.17 5.57.41.35.77 1.04.77 2.1v3.11c0 .31.2.66.79.55 4.48-1.5 7.71-5.72 7.71-10.71C23.3 5.53 18.27.5 12 .5z"/></svg>
-      <span class="t">
-        <b>github.com/n18xu/anonbox-mail</b>
-        <span>サーバー・フロントエンドの全コードと、暗号方式の詳細</span>
-      </span>
-    </a>
   </section>
 
   <section style="text-align:center;">
-    <h2 style="margin-bottom:0.4rem;">30秒で使えます</h2>
-    <p class="muted" style="margin-bottom:1.3rem;">アドレスとパスワードを決めるだけ。メールアドレスの登録も、本人確認もありません。</p>
+    <h2 style="margin-bottom:0.4rem;">使ってもらえることが一番の支援です</h2>
+    <p class="muted" style="margin-bottom:1.3rem;">まだの方は、30秒でアドレスを作れます。</p>
     <a class="btn primary" href="/">アドレスを作る</a>
   </section>
-  </div>
 
   <footer>
     AnonBox Mail — <a href="/">anonbox.email</a> ・
-    <a href="/donations">支援する</a> ・
+    <a href="/privacy">プライバシー</a> ・
     <a href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">ソースコード</a>
   </footer>
 
 </main>
 
 <script>
-  (function () {
-    var btn = document.getElementById("moreBtn");
-    var detail = document.getElementById("detail");
-    if (!btn || !detail) return;
-    btn.addEventListener("click", function () {
-      detail.hidden = false;
-      btn.remove();
-      try {
-        detail.scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch (e) {
-        detail.scrollIntoView();
-      }
+  document.querySelectorAll(".copy-btn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById("addr-" + b.dataset.copy);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+        b.classList.add("done");
+        setTimeout(function () { b.classList.remove("done"); }, 1500);
+      });
     });
-    // anyone arriving with a link to a section should see it straight away
-    if (location.hash && location.hash.length > 1) {
-      detail.hidden = false;
-      btn.remove();
-    }
-  })();
+  });
 </script>
 </body>
 </html>
