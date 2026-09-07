@@ -1,0 +1,24 @@
+name = "anonbox-mail"
+main = "src/worker.js"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+account_id = "d8f8d542de0893bd1b29a76f7b6dbe8d"
+
+routes = [
+  { pattern = "api.anonbox.email", custom_domain = true }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "anonbox-mail"
+database_id = "574b7bfd-4895-4b18-807b-f2dbc289a80f"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+RETENTION_HOURS = "720"
+VAPID_PUBLIC_KEY = "BGRdfWRgReTghnOXPnnb_iRKA23GmmT71WxQnSNKWswIi8p7jfarD5jDdxbeZzPk_NUuT2vVdQj6g_T0RGzbebU"
+VAPID_SUBJECT = "mailto:admin@anonbox.email"

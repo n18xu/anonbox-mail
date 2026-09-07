@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1f2023" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Crypt Mail">
+<meta name="mobile-web-app-capable" content="yes">
+<script src="/purify.min.js"></script>
+<title>Crypt Mail</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f5f7fa;
+    --chip: #f1f3f4;
+    --hover: #f1f3f4;
+    --border: #dadce0;
+    --divider: #ebeced;
+    --text: #202124;
+    --muted: #5f6368;
+    --faint: #80868b;
+    --accent: #1a73e8;
+    --accent-hover: #1b66c9;
+    --accent-soft: #e8f0fe;
+    --danger: #d93025;
+    --danger-soft: #fce8e6;
+    --success: #1e8e3e;
+    --shadow-1: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+    --shadow-2: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #131314;
+      --surface: #1f2023;
+      --surface-2: #17181a;
+      --chip: #2a2b2e;
+      --hover: #2a2b2e;
+      --border: #3c4043;
+      --divider: #2c2d30;
+      --text: #e8eaed;
+      --muted: #9aa0a6;
+      --faint: #80868b;
+      --accent: #8ab4f8;
+      --accent-hover: #a6c8ff;
+      --accent-soft: #1f3b63;
+      --danger: #f28b82;
+      --danger-soft: #3b2422;
+      --success: #81c995;
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px 1px rgba(0, 0, 0, 0.3);
+      --shadow-2: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.35);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    padding: 0.55rem 1rem;
+    font-weight: 500;
+    color: var(--text);
+    background: transparent;
+    transition: background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
+  }
+  button:focus { outline: none; }
+  button::-moz-focus-inner { border: 0; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-hover); box-shadow: var(--shadow-1); }
+  button.primary:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+  button.ghost { background: transparent; color: var(--muted); }
+  button.ghost:hover { background: var(--hover); color: var(--text); }
+  button.danger { background: transparent; color: var(--danger); }
+  button.danger:hover { background: var(--danger-soft); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input {
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 16px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  .hidden { display: none !important; }
+
+  /* AUTH */
+  .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2.25rem 2rem;
+  }
+  .auth-card h1 { font-size: 1.375rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+  .accent { color: var(--accent); }
+  .brand-icon {
+    width: 30px; height: 30px; border-radius: 6px;
+    background: var(--accent); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; padding: 5px;
+  }
+  .brand-icon.sm { width: 26px; height: 26px; border-radius: 5px; padding: 4px; }
+  .brand-icon svg { width: 100%; height: 100%; display: block; }
+  .auth-card .lead { color: var(--muted); margin-bottom: 1.75rem; font-size: 0.875rem; line-height: 1.6; }
+  .field { margin-bottom: 1.25rem; }
+  .field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.375rem; font-weight: 500; }
+  .address-field { display: flex; align-items: stretch; }
+  .address-field input { border-right: none; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .address-field .domain {
+    background: var(--chip);
+    border: 1px solid var(--border);
+    border-left: none;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    padding: 0 0.75rem;
+    display: flex; align-items: center;
+    color: var(--muted); font-size: 0.875rem; white-space: nowrap;
+  }
+  .password-field { position: relative; }
+  .password-field input { padding-right: 2.75rem; }
+  .password-toggle {
+    position: absolute; right: 0.3rem; top: 50%;
+    transform: translateY(-50%);
+    background: transparent; color: var(--muted);
+    padding: 0.4rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .password-toggle:hover { color: var(--text); background: var(--hover); }
+  .password-toggle svg { width: 18px; height: 18px; }
+  .auth-card button.primary { width: 100%; margin-top: 0.5rem; padding: 0.7rem 1rem; }
+  .tabs { display: flex; position: relative; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab-indicator {
+    position: absolute; bottom: -1px; left: 0;
+    height: 2px; width: 50%;
+    background: var(--accent);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .tab { flex: 1; padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; color: var(--muted); font-weight: 500; font-size: 0.875rem; transition: color 0.15s; }
+  .tab.active { color: var(--accent); }
+  .auth-error { background: var(--danger-soft); color: var(--danger); padding: 0.7rem 0.85rem; border-radius: 4px; font-size: 0.8125rem; margin-bottom: 1rem; }
+  .helper { font-size: 0.75rem; color: var(--muted); margin-top: 0.375rem; line-height: 1.6; }
+
+  /* APP */
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { font-weight: 500; font-size: 1.125rem; display: flex; align-items: center; gap: 0.5rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .spacer { flex: 1; }
+  .topbar .addr {
+    background: var(--chip);
+    padding: 0.45rem 0.9rem;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    color: var(--muted);
+    max-width: 300px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .topbar-actions { display: flex; align-items: center; gap: 0.125rem; flex: 0 0 auto; }
+  .icon-btn {
+    background: transparent; color: var(--muted);
+    padding: 0.5rem; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { color: var(--text); background: var(--hover); }
+  .icon-btn svg { width: 20px; height: 20px; display: block; }
+
+  .main { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding-bottom: 3rem; }
+  .inbox-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1rem; }
+  .inbox-head h2 { font-size: 0.9375rem; font-weight: 500; }
+  .inbox-head .spacer { flex: 1; }
+  .inbox-head .status { color: var(--faint); font-size: 0.75rem; }
+  .inbox-head .status::before { content: "●"; color: var(--success); margin-right: 0.25rem; font-size: 0.625rem; }
+  .inbox-head .status.offline::before { color: var(--danger); }
+  .inbox-head .icon-btn { padding: 0.4rem; }
+  .search-box {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 0.45rem;
+    background: var(--chip); border-radius: 8px;
+    padding: 0.3rem 0.35rem 0.3rem 0.65rem;
+  }
+  .search-box > svg { width: 17px; height: 17px; color: var(--muted); flex-shrink: 0; }
+  .search-box input {
+    flex: 1; min-width: 0;
+    border: none; background: transparent; padding: 0.2rem 0;
+    font-size: 15px; color: var(--text); border-radius: 0;
+  }
+  .search-box input:focus { outline: none; box-shadow: none; }
+  .search-box input::placeholder { color: var(--faint); }
+  .search-box input::-webkit-search-cancel-button,
+  .search-box input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+  .search-clear {
+    padding: 0.25rem; border-radius: 50%; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .search-clear:hover { background: var(--hover); color: var(--text); }
+  .search-clear svg { width: 14px; height: 14px; }
+  .filter-chip {
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.3rem 0.7rem; font-size: 0.8125rem;
+    color: var(--muted); background: transparent; flex-shrink: 0;
+  }
+  .filter-chip:hover { background: var(--hover); color: var(--text); }
+  .filter-chip.active { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 500; }
+  .empty .clear-filter { margin-top: 0.9rem; }
+  .inbox-head .icon-btn svg { width: 18px; height: 18px; }
+
+  .select-bar {
+    display: flex; align-items: center; gap: 0.375rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+  }
+  .select-bar .count { font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
+  .select-bar .spacer { flex: 1; }
+  .select-bar button { padding: 0.4rem 0.75rem; font-size: 0.8125rem; }
+  .select-bar button.ghost:hover { background: rgba(60, 64, 67, 0.1); }
+
+  .messages { display: block; border-top: 1px solid var(--divider); }
+  .msg {
+    display: flex; gap: 0.75rem; align-items: flex-start;
+    padding: 0.7rem 1rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--divider);
+    cursor: pointer; position: relative;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .msg.unread { background: var(--surface); }
+  .msg.selected { background: var(--accent-soft); }
+  @media (hover: hover) {
+    .msg:hover { box-shadow: var(--shadow-1); z-index: 1; }
+  }
+  .msg .avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 500; font-size: 1rem; flex-shrink: 0;
+  }
+  .msg .check {
+    display: none;
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid var(--border);
+    background: transparent; color: transparent;
+    align-items: center; justify-content: center; flex-shrink: 0;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .msg .check svg { width: 20px; height: 20px; }
+  .messages.select-mode .msg .avatar { display: none; }
+  .messages.select-mode .msg .check { display: flex; }
+  .msg.selected .check { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .msg .body { flex: 1; min-width: 0; }
+  .msg .row { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+  .msg .from { font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg.unread .from { font-weight: 700; }
+  .msg .time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; transition: opacity 0.15s; }
+  .msg.unread .time { color: var(--text); font-weight: 600; }
+  .msg .subject { color: var(--muted); font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.125rem; }
+  .msg.unread .subject { color: var(--text); }
+  .msg-delete {
+    position: absolute; right: 0.75rem; top: 50%;
+    transform: translateY(-50%);
+    width: 32px; height: 32px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); color: var(--muted);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+  }
+  .msg-delete svg { width: 16px; height: 16px; }
+  .msg-delete:hover { color: var(--danger); background: var(--danger-soft); }
+  @media (hover: hover) {
+    .msg:hover .msg-delete { opacity: 1; pointer-events: auto; }
+    .msg:hover .time { opacity: 0; }
+  }
+  @media (hover: none) {
+    .msg-delete { opacity: 1; pointer-events: auto; position: static; transform: none; align-self: center; margin-left: 0.25rem; background: transparent; color: var(--faint); }
+  }
+  .messages.select-mode .msg-delete { display: none; }
+  .messages.select-mode .msg .time { opacity: 1 !important; }
+
+  .empty { padding: 4rem 1rem; text-align: center; color: var(--muted); font-size: 0.875rem; line-height: 1.8; }
+  .empty .big { font-size: 2.25rem; margin-bottom: 0.5rem; opacity: 0.45; }
+
+  .load-more-wrap { padding: 1rem; text-align: center; }
+  .load-more-wrap button { min-width: 200px; border: 1px solid var(--border); }
+  .danger-zone { padding: 1.75rem 1rem 0; text-align: right; }
+
+  /* MODAL */
+  dialog {
+    background: var(--surface);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    width: 92%;
+    max-width: 720px;
+    max-height: 88vh;
+    padding: 0;
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+    transition: opacity 0.15s ease-out, transform 0.18s ease-out;
+  }
+  dialog.show { opacity: 1; transform: translateY(0) scale(1); }
+  dialog[open] { display: flex; flex-direction: column; }
+  .modal-head, .modal-actions { flex-shrink: 0; }
+  .mail-head { padding: 0.25rem 0.5rem; }
+  .mail-delete { color: var(--muted); }
+  .mail-delete:hover { color: var(--danger); background: var(--danger-soft); }
+  .mail-subject { font-size: 1.125rem; font-weight: 500; line-height: 1.4; word-break: break-word; padding: 0.7rem 1rem 0.3rem; }
+  #modal .modal-meta { border-bottom: none; padding: 0 1rem 0.7rem; line-height: 1.45; }
+  #modal .body-switcher { padding: 0.3rem 1rem; }
+  #modal .body-switcher { border-top: 1px solid var(--divider); }
+  .modal-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  dialog::backdrop { background: rgba(32, 33, 36, 0); transition: background 0.2s ease-out; }
+  dialog.show::backdrop { background: rgba(32, 33, 36, 0.5); }
+  .modal-head { padding: 1rem 1.25rem; border-bottom: 1px solid var(--divider); display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .modal-head .subject { font-weight: 400; font-size: 1.25rem; line-height: 1.4; word-break: break-word; flex: 1; min-width: 0; }
+  .modal-close {
+    background: transparent; color: var(--muted);
+    padding: 0.5rem; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .modal-close:hover { color: var(--text); background: var(--hover); }
+  .modal-close svg { width: 18px; height: 18px; display: block; }
+  .modal-meta { padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--divider); font-size: 0.8125rem; color: var(--muted); }
+  .modal-meta div + div { margin-top: 0.15rem; }
+  .modal-meta .meta-from { color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-meta strong { color: var(--text); margin-right: 0.375rem; font-weight: 500; }
+  .modal-body { padding: 1.25rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.9375rem; line-height: 1.7; }
+  .body-switcher { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; border-bottom: 1px solid var(--divider); }
+  .body-tabs { display: flex; gap: 0.25rem; }
+  .body-tab { background: transparent; color: var(--muted); padding: 0.25rem 0.7rem; font-size: 0.8125rem; border-radius: 16px; }
+  .body-tab:hover { background: var(--hover); }
+  .body-tab.active { background: var(--accent-soft); color: var(--accent); }
+  .body-switcher .spacer { flex: 1; }
+  .img-toggle { background: transparent; color: var(--accent); padding: 0.3rem 0.75rem; font-size: 0.75rem; font-weight: 500; border-radius: 16px; }
+  .img-toggle:hover { background: var(--accent-soft); }
+  .html-frame { width: 100%; border: none; height: 240px; background: #ffffff; display: block; }
+  .html-frame.no-measure { height: 70vh; }
+  .modal-actions { padding: 0.75rem 1.25rem; border-top: 1px solid var(--divider); display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+  .code-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 0.15rem 0.55rem; border-radius: 4px;
+    font-family: var(--mono); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.05em;
+    margin-top: 0.3rem; cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .code-chip:hover { background: var(--accent); color: #fff; }
+  .code-chip svg { width: 12px; height: 12px; }
+
+  .alias-list { display: flex; flex-direction: column; }
+  .alias-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.25rem; border-bottom: 1px solid var(--divider); }
+  .alias-item:last-child { border-bottom: none; }
+  .alias-item .addr { flex: 1; min-width: 0; font-family: var(--mono); font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alias-item .created { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+  .alias-item .icon-btn { padding: 0.4rem; }
+  .alias-item .icon-btn svg { width: 17px; height: 17px; }
+  .alias-empty { padding: 2rem 1rem; text-align: center; color: var(--muted); font-size: 0.8125rem; }
+
+  /* ACCOUNT */
+  .cred-row {
+    display: flex; align-items: center; gap: 0.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.4rem 0.4rem 0.85rem;
+  }
+  .cred-value { flex: 1; min-width: 0; font-family: var(--mono); font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cred-value.masked { letter-spacing: 0.18em; }
+  .cred-row .icon-btn { padding: 0.4rem; }
+  .cred-row .icon-btn svg { width: 17px; height: 17px; }
+  .cred-row .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .section-sep { border: none; border-top: 1px solid var(--divider); margin: 1.25rem 0 1rem; }
+  #pwChangeForm .field:last-of-type { margin-bottom: 1rem; }
+  #accountModal .modal-body { white-space: normal; }
+  #accountModal .field label { margin-bottom: 0.4rem; }
+
+  .migrate-banner {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+    padding: 0.7rem 1rem;
+    font-size: 0.8125rem;
+    color: var(--text);
+  }
+  .migrate-text { flex: 1 1 240px; min-width: 0; line-height: 1.6; }
+  .migrate-text strong { font-family: var(--mono); font-size: 0.875rem; }
+  .migrate-note { display: block; color: var(--muted); font-size: 0.75rem; }
+  .migrate-go {
+    flex-shrink: 0;
+    background: var(--accent); color: #fff;
+    padding: 0.45rem 0.9rem; border-radius: 4px;
+    font-weight: 500; font-size: 0.8125rem;
+  }
+  .migrate-go:hover { background: var(--accent-hover); }
+
+  .toast {
+    position: fixed; bottom: 1.5rem; left: 50%;
+    transform: translateX(-50%);
+    background: #323232; color: #fff;
+    padding: 0.75rem 1.1rem; border-radius: 4px; font-size: 0.8125rem;
+    box-shadow: var(--shadow-2);
+    opacity: 0; transition: opacity 0.15s; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 600px) {
+    .topbar { flex-wrap: wrap; gap: 0.25rem; padding: 0.5rem 0.625rem; }
+    .topbar .brand { flex: 1 1 auto; order: 1; font-size: 1rem; gap: 0.375rem; }
+    .topbar .spacer { display: none; }
+    .topbar-actions { order: 2; gap: 0; }
+    .topbar-actions .icon-btn { padding: 0.45rem; }
+    .topbar-actions .icon-btn svg { width: 19px; height: 19px; }
+    .topbar .addr { max-width: none; flex: 1 1 100%; order: 3; text-align: center; }
+    .msg { padding: 0.7rem 0.75rem; }
+    .inbox-head { padding: 0.5rem 0.75rem; gap: 0.4rem; }
+    .inbox-head .status { font-size: 0; }
+    .inbox-head .status::before { font-size: 0.7rem; margin-right: 0; }
+    dialog[open] {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      max-width: 100vw;
+      max-height: 100vh;
+      max-height: 100dvh;
+      border-radius: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .html-frame.no-measure { height: auto; min-height: 60vh; }
+    .modal-head { padding: 0.875rem 1rem; padding-top: max(0.875rem, env(safe-area-inset-top)); flex-shrink: 0; }
+    .modal-meta { padding: 0.75rem 1rem; }
+    .modal-actions { padding: 0.75rem 1rem; padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); flex-shrink: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- MIGRATION NOTICE (old domain only) -->
+<div class="migrate-banner hidden" id="migrateBanner">
+  <div class="migrate-text">
+    このサービスは <strong id="migrateDomain"></strong> に移行しました。
+    <span class="migrate-note">新しいドメインでは、同じメールアドレスとパスワードで再度ログインしてください。</span>
+  </div>
+  <a class="migrate-go" id="migrateLink" href="#">新しいサイトを開く</a>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="authScreen" class="auth-wrap">
+  <div class="auth-card">
+    <h1><span class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>Crypt <span class="accent">Mail</span></h1>
+    <p class="lead">アカウント制の使い捨てメールサービスです。ログインしたユーザーのみが受信トレイを閲覧できます。</p>
+
+    <div class="tabs" id="tabs">
+      <div class="tab-indicator" id="tabIndicator"></div>
+      <div class="tab active" data-tab="login">ログイン</div>
+      <div class="tab" data-tab="signup">新規登録</div>
+    </div>
+
+    <div id="authError" class="auth-error hidden"></div>
+
+    <form id="authForm">
+      <div class="field">
+        <label>メールアドレス</label>
+        <div class="address-field">
+          <input id="addressInput" type="text" autocomplete="username" placeholder="abc123" required>
+          <div class="domain">@<span id="domainText">xiefy.site</span></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>パスワード</label>
+        <div class="password-field">
+          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="8文字以上" required minlength="8">
+          <button type="button" class="password-toggle" id="pwToggle" aria-label="パスワードを表示">
+            <svg id="pwIconShow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <svg id="pwIconHide" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="helper" id="pwHelper">8文字以上でご入力ください。アカウントを保護する重要なパスワードです。</div>
+      </div>
+
+      <button type="submit" class="primary" id="submitBtn">ログイン</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="appScreen" class="app hidden">
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>Crypt <span class="accent">Mail</span></div>
+    <div class="spacer"></div>
+    <div class="addr" id="appAddr"></div>
+    <div class="topbar-actions">
+    <button class="icon-btn hidden" id="notifBtn" title="通知" aria-label="プッシュ通知">
+      <svg id="notifIconOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        <path d="M18.63 13A17.89 17.89 0 0 1 18 8"></path>
+        <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"></path>
+        <path d="M18 8a6 6 0 0 0-9.33-5"></path>
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+      </svg>
+      <svg id="notifIconOn" class="hidden" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke-width="2"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="copyBtn" title="アドレスをコピー" aria-label="アドレスをコピー">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="aliasBtn" title="匿名アドレス" aria-label="匿名アドレスを管理">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m18 14 4 4-4 4"></path>
+        <path d="m18 2 4 4-4 4"></path>
+        <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"></path>
+        <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"></path>
+        <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="refreshBtn" title="更新" aria-label="受信箱を更新">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="settingsBtn" title="アカウント" aria-label="アカウント設定">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="logoutBtn" title="ログアウト" aria-label="ログアウト">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+    </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="inbox-head" id="inboxHead">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="searchInput" type="search" placeholder="メールを検索" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <button class="search-clear hidden" id="searchClear" type="button" aria-label="検索をクリア">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <button class="filter-chip" id="unreadBtn" type="button" aria-pressed="false">未読</button>
+      <div class="status" id="status" title="接続状態">新着を確認しています</div>
+      <button class="icon-btn" id="selectModeBtn" title="選択して削除" aria-label="メールを選択">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 11 12 14 22 4"></polyline>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="select-bar hidden" id="selectBar">
+      <button class="ghost" id="selectCancelBtn">キャンセル</button>
+      <div class="count" id="selectCount">0件を選択</div>
+      <div class="spacer"></div>
+      <button class="ghost" id="selectAllBtn">すべて選択</button>
+      <button class="danger" id="bulkDeleteBtn" disabled>削除</button>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="load-more-wrap hidden" id="loadMoreWrap">
+      <button class="ghost" id="loadMoreBtn" type="button">さらに読み込む</button>
+    </div>
+
+    <div class="danger-zone">
+      <button class="danger" id="deleteAccBtn">アカウントを削除する</button>
+    </div>
+  </main>
+</div>
+
+<dialog id="modal">
+  <div class="modal-head mail-head">
+    <button class="modal-close" id="modalClose" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+    <button class="icon-btn mail-delete" id="modalDeleteBtn" title="削除する" aria-label="削除する">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-scroll" id="modalScroll">
+    <h1 class="mail-subject" id="modalSubject"></h1>
+    <div class="modal-meta" id="modalMeta"></div>
+    <div class="body-switcher hidden" id="bodySwitcher">
+      <div class="body-tabs" id="bodyTabs">
+        <button class="body-tab" data-view="html" id="tabHtml">HTML</button>
+        <button class="body-tab" data-view="text" id="tabText">テキスト</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="img-toggle hidden" id="imgToggleBtn">画像を表示</button>
+    </div>
+    <iframe class="html-frame hidden" id="htmlFrame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</dialog>
+
+<dialog id="aliasModal">
+  <div class="modal-head">
+    <div class="subject">匿名アドレス</div>
+    <button class="modal-close" id="aliasModalClose" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <p class="helper" style="margin-bottom: 1rem;">匿名アドレス宛に届いたメールは、自動的にこの受信トレイに届きます。使い終わったらいつでも削除できます。</p>
+    <div id="aliasList" class="alias-list"></div>
+  </div>
+  <div class="modal-actions">
+    <button class="primary" id="createAliasBtn">新しい匿名アドレスを生成</button>
+  </div>
+</dialog>
+
+<dialog id="accountModal">
+  <div class="modal-head">
+    <div class="subject">アカウント</div>
+    <button class="modal-close" id="accountModalClose" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <div class="field">
+      <label>メールアドレス</label>
+      <div class="cred-row">
+        <div class="cred-value" id="accAddr"></div>
+        <button class="icon-btn" id="accAddrCopy" title="コピー" aria-label="アドレスをコピー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>パスワード</label>
+      <div class="cred-row">
+        <div class="cred-value masked" id="accPw">••••••••</div>
+        <button class="icon-btn" id="accPwToggle" title="パスワードを表示" aria-label="パスワードを表示">
+          <svg id="accPwIconShow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <svg id="accPwIconHide" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+        </button>
+        <button class="icon-btn" id="accPwCopy" title="コピー" aria-label="パスワードをコピー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+      </div>
+      <div class="helper" id="accPwHelper">この端末に保存されているパスワードです。サーバーには暗号化されたハッシュのみが保存されています。</div>
+    </div>
+
+    <form id="pwChangeForm" class="hidden">
+      <hr class="section-sep">
+      <div id="pwChangeError" class="auth-error hidden"></div>
+      <div class="field">
+        <label>現在のパスワード</label>
+        <div class="password-field">
+          <input id="curPwInput" type="password" autocomplete="current-password" placeholder="現在のパスワード" required minlength="8">
+          <button type="button" class="password-toggle" data-pwtoggle="curPwInput" aria-label="パスワードを表示">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label>新しいパスワード</label>
+        <div class="password-field">
+          <input id="newPwInput" type="password" autocomplete="new-password" placeholder="8文字以上" required minlength="8">
+          <button type="button" class="password-toggle" data-pwtoggle="newPwInput" aria-label="パスワードを表示">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label>新しいパスワード（確認）</label>
+        <input id="newPwInput2" type="password" autocomplete="new-password" placeholder="もう一度ご入力ください" required minlength="8">
+      </div>
+      <div class="helper" style="margin-bottom: 0.75rem;">変更すると暗号鍵が新しいパスワードで再暗号化され、他の端末のログインは無効になります。</div>
+      <button type="submit" class="primary" id="pwChangeSubmit" style="width:100%;">パスワードを変更する</button>
+    </form>
+  </div>
+  <div class="modal-actions">
+    <button class="ghost" id="pwChangeToggle">パスワードを変更</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// --- domain switch: set MIGRATION_TO once the new domain is live, and point
+// --- API_HOST at the new api host. Old hosts keep working and show a notice.
+const MIGRATION_TO = "anonbox.email";
+const LEGACY_HOSTS = ["xiefy.site", "www.xiefy.site"];
+// the same build serves both domains: the old one keeps talking to the old API
+const API_HOST = LEGACY_HOSTS.includes(location.hostname) ? "api.xiefy.site" : "api.anonbox.email";
+
+const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+  ? "http://localhost:8787/api"
+  : "https://" + API_HOST + "/api";
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  tab: "login",
+  token: localStorage.getItem("xiefy_token") || null,
+  address: localStorage.getItem("xiefy_addr") || null,
+  domain: "xiefy.site",
+  pollTimer: null,
+  timeTimer: null,
+  lastMsgSig: null,
+  currentMessageId: null,
+  swReg: null,
+  vapidKey: null,
+  pushSubscribed: false,
+  privateKey: null,
+  aesKeyCache: new Map(),
+  currentBody: null,
+  password: null,
+  decoded: [],
+  raw: [],
+  metaCache: new Map(),
+  hasMore: false,
+  query: "",
+  unreadOnly: false,
+  selectMode: false,
+  selected: new Set(),
+};
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("xiefy_keys", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("keys");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("keys", "readwrite");
+    tx.objectStore("keys").put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key) {
+  try {
+    const db = await idbOpen();
+    return new Promise((resolve) => {
+      const tx = db.transaction("keys", "readonly");
+      const req = tx.objectStore("keys").get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+async function idbClear() {
+  try {
+    const db = await idbOpen();
+    return new Promise((resolve) => {
+      const tx = db.transaction("keys", "readwrite");
+      tx.objectStore("keys").clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) {}
+}
+
+const isStandalone = () =>
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.navigator.standalone === true;
+
+const supportsPush = () =>
+  "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+const urlB64ToUint8 = (s) => {
+  const padded = s + "=".repeat((4 - (s.length % 4)) % 4);
+  const b64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+};
+
+const b64ToBytes = (s) => {
+  const bin = atob(s);
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+};
+const bytesToB64 = (bytes) => {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+};
+
+// ===== E2EE crypto =====
+
+async function deriveKeyFromPassword(password, saltBytes) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function generateRsaKeyPair() {
+  return await crypto.subtle.generateKey(
+    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function setupKeyMaterial(password) {
+  const keyPair = await generateRsaKeyPair();
+  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", keyPair.publicKey));
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+
+  const kdfSalt = crypto.getRandomValues(new Uint8Array(16));
+  const pkIv = crypto.getRandomValues(new Uint8Array(12));
+  const wrapKey = await deriveKeyFromPassword(password, kdfSalt);
+
+  const encryptedPriv = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: pkIv }, wrapKey, pkcs8)
+  );
+
+  return {
+    public_key: bytesToB64(spki),
+    encrypted_private_key: bytesToB64(encryptedPriv),
+    pk_iv: bytesToB64(pkIv),
+    kdf_salt: bytesToB64(kdfSalt),
+  };
+}
+
+async function unwrapPrivateKey(password, encryptedB64, ivB64, saltB64) {
+  const wrapKey = await deriveKeyFromPassword(password, b64ToBytes(saltB64));
+  const pkcs8 = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(ivB64) },
+    wrapKey,
+    b64ToBytes(encryptedB64)
+  );
+  return await crypto.subtle.importKey(
+    "pkcs8",
+    pkcs8,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["decrypt"]
+  );
+}
+
+async function decryptPrivateKeyPkcs8(password, encryptedB64, ivB64, saltB64) {
+  const wrapKey = await deriveKeyFromPassword(password, b64ToBytes(saltB64));
+  return await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(ivB64) },
+    wrapKey,
+    b64ToBytes(encryptedB64)
+  );
+}
+
+async function rewrapPrivateKey(pkcs8, newPassword) {
+  const kdfSalt = crypto.getRandomValues(new Uint8Array(16));
+  const pkIv = crypto.getRandomValues(new Uint8Array(12));
+  const wrapKey = await deriveKeyFromPassword(newPassword, kdfSalt);
+  const encrypted = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: pkIv }, wrapKey, pkcs8)
+  );
+  return {
+    encrypted_private_key: bytesToB64(encrypted),
+    pk_iv: bytesToB64(pkIv),
+    kdf_salt: bytesToB64(kdfSalt),
+  };
+}
+
+async function decryptAesKey(privateKey, encryptedAesKeyB64) {
+  const raw = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    b64ToBytes(encryptedAesKeyB64)
+  );
+  return await crypto.subtle.importKey(
+    "raw",
+    raw,
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"]
+  );
+}
+
+async function aesDecrypt(aesKey, ivB64, ciphertextB64) {
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(ivB64) },
+    aesKey,
+    b64ToBytes(ciphertextB64)
+  );
+  return new TextDecoder().decode(plain);
+}
+
+const showToast = (msg) => {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1500);
+};
+
+const escapeHtml = (s) => (s || "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+
+const AVATAR_COLORS = ["#5f6368", "#3f6ea5", "#4b7d63", "#8a6d3b", "#7a5a86", "#a05a52", "#4a6f8a", "#7b6b4f"];
+const avatarColor = (seed) => {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+};
+
+function buildHtmlDoc(rawHtml, allowImages) {
+  const dirty = rawHtml || "";
+  let cleaned = "";
+  try {
+    cleaned = DOMPurify.sanitize(dirty, {
+      WHOLE_DOCUMENT: true,
+      FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
+      FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "onsubmit", "srcset"],
+      ALLOW_DATA_ATTR: false,
+    });
+  } catch (e) {
+    cleaned = "";
+  }
+
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(cleaned, "text/html");
+  } catch (e) {
+    doc = new DOMParser().parseFromString("<html><body></body></html>", "text/html");
+  }
+
+  let remoteCount = 0;
+  doc.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src") || "";
+    if (src.startsWith("data:") || src.startsWith("cid:")) return;
+    remoteCount++;
+    if (!allowImages) {
+      img.setAttribute("data-orig-src", src);
+      img.removeAttribute("src");
+      img.setAttribute("alt", img.getAttribute("alt") || "[画像]");
+    }
+  });
+  doc.querySelectorAll("a").forEach((a) => {
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer");
+  });
+
+  const headHtml = doc.head ? doc.head.innerHTML : "";
+  const bodyHtml = doc.body ? doc.body.innerHTML : "";
+
+  const baseCss = `html{-webkit-text-size-adjust:100%}html,body{margin:0;padding:0;max-width:100%;overflow-x:auto}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;padding:12px;font-size:14px;line-height:1.6;word-break:break-word;color:#1a1a1a;background:#ffffff}*{max-width:100%!important;box-sizing:border-box}img{max-width:100%!important;height:auto!important}table{width:auto!important;max-width:100%!important;table-layout:auto}td,th{max-width:100%!important;word-break:break-word}img:not([src]){display:inline-block;width:16px;height:16px;background:#e5e7eb;border-radius:3px;vertical-align:middle;padding:0;font-size:0;border:none;min-width:0;min-height:0}img:not([src])::after{content:""}`;
+
+  const fullHtml = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5"><base target="_blank"><meta name="color-scheme" content="light"><style>${baseCss}</style>${headHtml}</head><body>${bodyHtml}</body></html>`;
+
+  return { html: fullHtml, remoteCount };
+}
+
+function extractCode(...sources) {
+  const text = sources.filter(Boolean).join(" ");
+  if (!text) return null;
+  const labeled = text.match(/(?:認証コード|確認コード|verification\s*code|セキュリティ\s*コード|security\s*code|code|otp|pin)[\s:はがを]*([0-9]{4,8})\b/i);
+  if (labeled) return labeled[1];
+  const six = text.match(/\b([0-9]{6})\b/);
+  if (six) return six[1];
+  const seven = text.match(/\b([0-9]{4,8})\b/);
+  if (seven) {
+    const n = seven[1];
+    if (!/^(19|20)\d{2}$/.test(n)) return n;
+  }
+  return null;
+}
+
+const formatTime = (ms) => {
+  const d = new Date(ms);
+  const diff = Date.now() - ms;
+  if (diff < 60000) return "たった今";
+  if (diff < 3600000) return Math.floor(diff / 60000) + "分前";
+  if (diff < 86400000) return Math.floor(diff / 3600000) + "時間前";
+  return d.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
+const apiCall = async (path, opts = {}) => {
+  const headers = { ...(opts.headers || {}) };
+  if (opts.body && typeof opts.body !== "string") {
+    headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(opts.body);
+  }
+  if (state.token) headers["Authorization"] = "Bearer " + state.token;
+  const res = await fetch(API_BASE + path, { ...opts, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(data.error || ("HTTP " + res.status));
+    e.status = res.status;
+    throw e;
+  }
+  return data;
+};
+
+// AUTH
+const setTab = (tab) => {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.tab === tab));
+  $("tabIndicator").style.transform = tab === "signup" ? "translateX(100%)" : "translateX(0)";
+  $("submitBtn").textContent = tab === "login" ? "ログインする" : "アカウントを作成する";
+  $("pwHelper").textContent = tab === "login"
+    ? "登録時に設定したパスワードをご入力ください。"
+    : "8文字以上でご設定ください。";
+  $("passwordInput").setAttribute("autocomplete", tab === "login" ? "current-password" : "new-password");
+  $("authError").classList.add("hidden");
+};
+
+const showAuthError = (msg) => {
+  $("authError").textContent = msg;
+  $("authError").classList.remove("hidden");
+};
+
+document.querySelectorAll(".tab").forEach(el => {
+  el.addEventListener("click", () => setTab(el.dataset.tab));
+});
+
+$("pwToggle").addEventListener("click", () => {
+  const input = $("passwordInput");
+  const isPassword = input.type === "password";
+  input.type = isPassword ? "text" : "password";
+  $("pwIconShow").classList.toggle("hidden", isPassword);
+  $("pwIconHide").classList.toggle("hidden", !isPassword);
+  $("pwToggle").setAttribute("aria-label", isPassword ? "パスワードを隠す" : "パスワードを表示");
+});
+
+document.querySelectorAll("input:not(#searchInput)").forEach((el) => {
+  el.addEventListener("focus", () => {
+    setTimeout(() => {
+      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+    }, 350);
+  });
+});
+
+$("authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const local = $("addressInput").value.trim().toLowerCase();
+  const password = $("passwordInput").value;
+  if (!/^[a-z0-9._-]{3,32}$/.test(local)) {
+    showAuthError("メールアドレスは3〜32文字、半角英数字と「. _ -」のみご利用いただけます。");
+    return;
+  }
+  const address = local + "@" + state.domain;
+  const btn = $("submitBtn");
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  try {
+    if (state.tab === "signup") {
+      btn.textContent = "暗号鍵を生成中…";
+      const km = await setupKeyMaterial(password);
+      btn.textContent = "アカウントを作成中…";
+      await apiCall("/accounts", {
+        method: "POST",
+        body: { address, password, ...km },
+      });
+    }
+    btn.textContent = "ログイン中…";
+    const tk = await apiCall("/token", { method: "POST", body: { address, password } });
+    btn.textContent = "暗号鍵を復号中…";
+    const priv = await unwrapPrivateKey(
+      password,
+      tk.encrypted_private_key,
+      tk.pk_iv,
+      tk.kdf_salt
+    );
+    state.privateKey = priv;
+    state.token = tk.token;
+    state.address = address;
+    state.password = password;
+    state.aesKeyCache.clear();
+    localStorage.setItem("xiefy_token", tk.token);
+    localStorage.setItem("xiefy_addr", address);
+    await idbPut("private_key", priv);
+    await idbPut("account_password", password);
+    enterApp();
+  } catch (err) {
+    if (err.status === 409) showAuthError("このメールアドレスはすでに使用されています。");
+    else if (err.status === 401) showAuthError("メールアドレスまたはパスワードが正しくありません。");
+    else if (err.name === "OperationError") showAuthError("パスワードが正しくありません。");
+    else showAuthError(err.message || "エラーが発生しました。");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+});
+
+// PUSH
+const updateNotifButton = () => {
+  if (!supportsPush()) return;
+  $("notifBtn").classList.remove("hidden");
+  $("notifIconOff").classList.toggle("hidden", state.pushSubscribed);
+  $("notifIconOn").classList.toggle("hidden", !state.pushSubscribed);
+  $("notifBtn").setAttribute(
+    "title",
+    state.pushSubscribed ? "プッシュ通知を停止" : "プッシュ通知を有効化"
+  );
+};
+
+const checkPushSubscription = async () => {
+  if (!state.swReg) return;
+  const sub = await state.swReg.pushManager.getSubscription();
+  state.pushSubscribed = !!sub;
+  updateNotifButton();
+};
+
+const enablePush = async () => {
+  if (!supportsPush()) {
+    showToast("このブラウザは通知に対応していません");
+    return;
+  }
+  if (!isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    showToast("iPhoneは「ホーム画面に追加」してからご利用ください");
+    return;
+  }
+  if (!state.swReg) {
+    showToast("Service Workerが未登録です");
+    return;
+  }
+  try {
+    if (!state.vapidKey) {
+      const r = await fetch(API_BASE + "/push/key").then((r) => r.json());
+      state.vapidKey = r.key;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      showToast("通知が許可されませんでした");
+      return;
+    }
+    const sub = await state.swReg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8(state.vapidKey),
+    });
+    await apiCall("/push/subscribe", { method: "POST", body: sub.toJSON() });
+    state.pushSubscribed = true;
+    updateNotifButton();
+    showToast("プッシュ通知を有効化しました");
+  } catch (e) {
+    showToast("通知の有効化に失敗しました");
+  }
+};
+
+const disablePush = async () => {
+  try {
+    const sub = await state.swReg.pushManager.getSubscription();
+    if (sub) {
+      await apiCall("/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } });
+      await sub.unsubscribe();
+    }
+    state.pushSubscribed = false;
+    updateNotifButton();
+    showToast("プッシュ通知を停止しました");
+  } catch (e) {
+    showToast("通知の停止に失敗しました");
+  }
+};
+
+// APP
+const enterApp = async () => {
+  $("authScreen").classList.add("hidden");
+  $("appScreen").classList.remove("hidden");
+  $("appAddr").textContent = state.address;
+  await refreshMessages(true);
+  state.pollTimer = setInterval(() => refreshMessages(false), 5000);
+  state.timeTimer = setInterval(updateRelativeTimes, 30000);
+  await checkPushSubscription();
+};
+
+const exitApp = async () => {
+  clearInterval(state.pollTimer);
+  clearInterval(state.timeTimer);
+  state.lastMsgSig = null;
+  state.token = null;
+  state.address = null;
+  state.privateKey = null;
+  state.password = null;
+  state.selectMode = false;
+  state.selected.clear();
+  state.decoded = [];
+  state.raw = [];
+  state.metaCache.clear();
+  state.hasMore = false;
+  state.query = "";
+  state.unreadOnly = false;
+  $("searchInput").value = "";
+  state.aesKeyCache.clear();
+  localStorage.removeItem("xiefy_token");
+  localStorage.removeItem("xiefy_addr");
+  await idbClear();
+  $("authScreen").classList.remove("hidden");
+  $("appScreen").classList.add("hidden");
+  $("authForm").reset();
+};
+
+async function getAesKeyForMessage(m) {
+  let aesKey = state.aesKeyCache.get(m.id);
+  if (!aesKey) {
+    aesKey = await decryptAesKey(state.privateKey, m.encrypted_aes_key);
+    state.aesKeyCache.set(m.id, aesKey);
+  }
+  return aesKey;
+}
+
+async function decryptMeta(m) {
+  const aesKey = await getAesKeyForMessage(m);
+  const metaJson = await aesDecrypt(aesKey, m.meta_iv, m.meta_encrypted);
+  return JSON.parse(metaJson);
+}
+
+const MESSAGE_PAGE_SIZE = 300;
+const POLL_SIZE = 50;
+
+// a poll only covers the newest slice, so older messages already held are kept
+const mergeMessages = (fetched, isFull) => {
+  if (isFull) {
+    state.raw = fetched;
+    return;
+  }
+  if (!fetched.length) {
+    state.raw = [];
+    return;
+  }
+  const oldest = fetched[fetched.length - 1].received_at;
+  const byId = new Map();
+  fetched.forEach((m) => byId.set(m.id, m));
+  state.raw.forEach((m) => {
+    if (byId.has(m.id)) return;
+    if (m.received_at >= oldest) return; // inside the polled window but gone → deleted
+    byId.set(m.id, m);
+  });
+  state.raw = [...byId.values()].sort((a, b) => b.received_at - a.received_at);
+};
+
+const removeLocalMessages = (ids) => {
+  const gone = new Set(ids);
+  gone.forEach((id) => {
+    state.aesKeyCache.delete(id);
+    state.metaCache.delete(id);
+  });
+  state.raw = state.raw.filter((m) => !gone.has(m.id));
+  state.lastMsgSig = null;
+};
+
+const loadMore = async () => {
+  if (!state.raw.length) return;
+  const oldest = state.raw[state.raw.length - 1].received_at;
+  const data = await apiCall(`/messages?limit=${MESSAGE_PAGE_SIZE}&before=${oldest}`);
+  const more = data.messages || [];
+  state.hasMore = !!data.has_more;
+  if (more.length) {
+    const known = new Set(state.raw.map((m) => m.id));
+    state.raw = state.raw.concat(more.filter((m) => !known.has(m.id)));
+  }
+  state.lastMsgSig = null;
+  await renderMessages(state.raw);
+};
+
+const refreshMessages = async (full = false) => {
+  try {
+    const data = await apiCall("/messages?limit=" + (full ? MESSAGE_PAGE_SIZE : POLL_SIZE));
+    mergeMessages(data.messages || [], full);
+    if (full) state.hasMore = !!data.has_more;
+    const sig = state.raw.map(m => `${m.id}:${m.seen}`).join(",") + "|" + state.hasMore;
+    if (sig !== state.lastMsgSig) {
+      state.lastMsgSig = sig;
+      await renderMessages(state.raw);
+    }
+    setIdleStatus();
+  } catch (err) {
+    if (err.status === 401) {
+      exitApp();
+      return;
+    }
+    $("status").textContent = "接続できません";
+    $("status").classList.add("offline");
+  }
+};
+
+const updateRelativeTimes = () => {
+  document.querySelectorAll(".msg .time[data-received]").forEach((el) => {
+    el.textContent = formatTime(+el.dataset.received);
+  });
+};
+
+const filterActive = () => state.unreadOnly || state.query.trim() !== "";
+
+const matchesFilter = (m) => {
+  if (state.unreadOnly && m.seen) return false;
+  const q = state.query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [m._meta.from_name, m._meta.from_addr, m._meta.subject, m._meta.to_addr]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return q.split(/\s+/).every((term) => hay.includes(term));
+};
+
+const visibleMessages = () => (state.decoded || []).filter(matchesFilter);
+
+const setIdleStatus = () => {
+  const st = $("status");
+  st.classList.remove("offline");
+  st.textContent = filterActive()
+    ? `${visibleMessages().length}件を表示`
+    : (state.raw.length ? `${state.raw.length}件` : "新着を確認しています");
+};
+
+const clearSearch = () => {
+  state.query = "";
+  $("searchInput").value = "";
+  paintMessages();
+};
+
+const clearFilters = () => {
+  state.unreadOnly = false;
+  clearSearch();
+};
+
+const renderMessages = async (msgs) => {
+  if (!msgs || msgs.length === 0) {
+    state.decoded = [];
+    if (state.selectMode) exitSelectMode();
+    paintMessages();
+    return;
+  }
+  if (!state.privateKey) {
+    $("messages").innerHTML = '<div class="empty">復号できません。再ログインしてください。</div>';
+    return;
+  }
+  state.decoded = await Promise.all(
+    msgs.map(async (m) => {
+      let meta = state.metaCache.get(m.id);
+      if (!meta) {
+        try {
+          meta = await decryptMeta(m);
+        } catch (e) {
+          meta = { from_name: null, from_addr: "(復号失敗)", subject: "(復号失敗)" };
+        }
+        state.metaCache.set(m.id, meta);
+      }
+      return { ...m, _meta: meta };
+    })
+  );
+  paintMessages();
+};
+
+const paintMessages = () => {
+  const el = $("messages");
+  $("searchClear").classList.toggle("hidden", state.query === "");
+  $("unreadBtn").classList.toggle("active", state.unreadOnly);
+  $("unreadBtn").setAttribute("aria-pressed", state.unreadOnly ? "true" : "false");
+
+  $("loadMoreWrap").classList.toggle("hidden", !state.hasMore);
+
+  if (!state.decoded || state.decoded.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="big">📭</div>メールはまだ届いていません<br><span style="font-size: 0.75rem;">' + escapeHtml(state.address || "") + ' 宛のメールをお待ちしています</span></div>';
+    setIdleStatus();
+    return;
+  }
+
+  const decoded = visibleMessages();
+  if (decoded.length === 0) {
+    el.innerHTML =
+      '<div class="empty"><div class="big">🔍</div>条件に一致するメールがありません' +
+      '<div><button class="ghost clear-filter" id="clearFilterBtn" type="button">絞り込みを解除</button></div></div>';
+    $("clearFilterBtn").addEventListener("click", clearFilters);
+    state.selected.clear();
+    applySelectionUI();
+    setIdleStatus();
+    return;
+  }
+
+  el.innerHTML = decoded.map(m => {
+    const display = m._meta.from_name || m._meta.from_addr || "(不明な送信者)";
+    const initial = (display[0] || "?").toUpperCase();
+    const code = extractCode(m._meta.subject);
+    const codeChip = code
+      ? `<div class="code-chip" data-code="${escapeHtml(code)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>${escapeHtml(code)}</div>`
+      : "";
+    const selected = state.selected.has(m.id);
+    return `
+      <div class="msg ${m.seen ? "" : "unread"}${selected ? " selected" : ""}" data-id="${m.id}">
+        <div class="check" role="button" aria-label="選択">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <div class="avatar" style="background:${avatarColor(display)}">${escapeHtml(initial)}</div>
+        <div class="body">
+          <div class="row">
+            <div class="from">${escapeHtml(display)}</div>
+            <div class="time" data-received="${m.received_at}">${formatTime(m.received_at)}</div>
+          </div>
+          <div class="subject">${escapeHtml(m._meta.subject || "（件名なし）")}</div>
+          ${codeChip}
+        </div>
+        <button class="msg-delete" data-id="${m.id}" aria-label="削除" title="削除">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+    `;
+  }).join("");
+  const presentIds = new Set(decoded.map((m) => m.id));
+  state.selected.forEach((id) => {
+    if (!presentIds.has(id)) state.selected.delete(id);
+  });
+  setIdleStatus();
+
+  el.querySelectorAll(".msg").forEach(m => {
+    const id = m.dataset.id;
+    m.addEventListener("click", () => {
+      if (m.dataset.longPressed === "1") {
+        m.dataset.longPressed = "0";
+        return;
+      }
+      if (state.selectMode) toggleSelect(id);
+      else openMessage(id);
+    });
+
+    let timer = null;
+    let sx = 0;
+    let sy = 0;
+    const cancel = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    m.addEventListener("pointerdown", (ev) => {
+      m.dataset.longPressed = "0";
+      if (state.selectMode || ev.button !== 0) return;
+      sx = ev.clientX;
+      sy = ev.clientY;
+      timer = setTimeout(() => {
+        timer = null;
+        m.dataset.longPressed = "1";
+        enterSelectMode(id);
+        try { navigator.vibrate && navigator.vibrate(15); } catch (e) {}
+      }, 450);
+    });
+    m.addEventListener("pointermove", (ev) => {
+      if (timer && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) cancel();
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((evt) =>
+      m.addEventListener(evt, cancel)
+    );
+  });
+  el.querySelectorAll(".msg .avatar, .msg .check").forEach((slot) => {
+    slot.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const item = slot.closest(".msg");
+      if (!item) return;
+      if (item.dataset.longPressed === "1") {
+        item.dataset.longPressed = "0";
+        return;
+      }
+      if (state.selectMode) toggleSelect(item.dataset.id);
+      else enterSelectMode(item.dataset.id);
+    });
+  });
+  el.querySelectorAll(".code-chip").forEach(chip => {
+    chip.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      if (state.selectMode) {
+        const item = chip.closest(".msg");
+        if (item) toggleSelect(item.dataset.id);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(chip.dataset.code);
+        showToast("コードをコピーしました");
+      } catch (e) {
+        showToast("コピーに失敗しました");
+      }
+    });
+  });
+  el.querySelectorAll(".msg-delete").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      if (!confirm("このメールを削除しますか？")) return;
+      try {
+        await apiCall("/messages/" + btn.dataset.id, { method: "DELETE" });
+        removeLocalMessages([btn.dataset.id]);
+        await renderMessages(state.raw);
+        refreshMessages();
+      } catch (e) {
+        showToast("削除に失敗しました");
+      }
+    });
+  });
+  applySelectionUI();
+};
+
+// SELECTION
+const applySelectionUI = () => {
+  const el = $("messages");
+  el.classList.toggle("select-mode", state.selectMode);
+  el.querySelectorAll(".msg").forEach((m) => {
+    m.classList.toggle("selected", state.selectMode && state.selected.has(m.dataset.id));
+  });
+  $("inboxHead").classList.toggle("hidden", state.selectMode);
+  $("selectBar").classList.toggle("hidden", !state.selectMode);
+  const total = el.querySelectorAll(".msg").length;
+  $("selectCount").textContent = state.selected.size + "件を選択";
+  $("bulkDeleteBtn").disabled = state.selected.size === 0;
+  $("bulkDeleteBtn").textContent =
+    state.selected.size > 0 ? `削除（${state.selected.size}）` : "削除";
+  $("selectAllBtn").textContent =
+    total > 0 && state.selected.size === total ? "選択を解除" : "すべて選択";
+};
+
+const enterSelectMode = (id) => {
+  state.selectMode = true;
+  state.selected.clear();
+  if (id) state.selected.add(id);
+  applySelectionUI();
+};
+
+const exitSelectMode = () => {
+  state.selectMode = false;
+  state.selected.clear();
+  applySelectionUI();
+};
+
+const toggleSelect = (id) => {
+  if (state.selected.has(id)) state.selected.delete(id);
+  else state.selected.add(id);
+  applySelectionUI();
+};
+
+let searchTimer = null;
+$("searchInput").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.query = $("searchInput").value;
+    paintMessages();
+  }, 120);
+});
+$("searchInput").addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") {
+    ev.stopPropagation();
+    clearSearch();
+    $("searchInput").blur();
+  }
+});
+$("searchClear").addEventListener("click", () => {
+  clearSearch();
+  $("searchInput").focus();
+});
+$("unreadBtn").addEventListener("click", () => {
+  state.unreadOnly = !state.unreadOnly;
+  paintMessages();
+});
+
+$("loadMoreBtn").addEventListener("click", async () => {
+  const btn = $("loadMoreBtn");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "読み込み中…";
+  try {
+    await loadMore();
+  } catch (e) {
+    showToast("読み込みに失敗しました");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+$("selectModeBtn").addEventListener("click", () => enterSelectMode(null));
+$("selectCancelBtn").addEventListener("click", exitSelectMode);
+$("selectAllBtn").addEventListener("click", () => {
+  const ids = [...$("messages").querySelectorAll(".msg")].map((m) => m.dataset.id);
+  if (state.selected.size === ids.length) state.selected.clear();
+  else ids.forEach((id) => state.selected.add(id));
+  applySelectionUI();
+});
+$("bulkDeleteBtn").addEventListener("click", async () => {
+  const ids = [...state.selected];
+  if (ids.length === 0) return;
+  if (!confirm(`選択した${ids.length}件のメールを削除しますか？`)) return;
+  const btn = $("bulkDeleteBtn");
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      await apiCall("/messages/delete", { method: "POST", body: { ids: ids.slice(i, i + 100) } });
+    }
+    removeLocalMessages(ids);
+    exitSelectMode();
+    showToast(`${ids.length}件を削除しました`);
+    await renderMessages(state.raw);
+    refreshMessages();
+  } catch (e) {
+    showToast("削除に失敗しました");
+    btn.disabled = false;
+  }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && state.selectMode && !document.querySelector("dialog[open]")) {
+    exitSelectMode();
+  }
+});
+
+function openModal(id = "modal") {
+  const dlg = $(id);
+  dlg.showModal();
+  requestAnimationFrame(() => requestAnimationFrame(() => dlg.classList.add("show")));
+}
+
+function closeModal(id = "modal") {
+  const dlg = $(id);
+  if (!dlg.classList.contains("show")) {
+    dlg.close();
+    return;
+  }
+  dlg.classList.remove("show");
+  const onEnd = (e) => {
+    if (e.target !== dlg || e.propertyName !== "transform") return;
+    dlg.removeEventListener("transitionend", onEnd);
+    dlg.close();
+  };
+  dlg.addEventListener("transitionend", onEnd);
+}
+
+$("modal").addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeModal("modal");
+});
+$("aliasModal").addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeModal("aliasModal");
+});
+
+let frameObserver = null;
+let frameHeightSet = 0;
+
+// grow the mail frame to its own content so the modal keeps a single scrollbar
+const fitHtmlFrame = () => {
+  const f = $("htmlFrame");
+  let doc = null;
+  try { doc = f.contentDocument; } catch (e) { doc = null; }
+  if (!doc || !doc.body) {
+    // cannot measure (blocked cross-origin) → fall back to a tall scrollable frame
+    f.style.height = "";
+    f.classList.add("no-measure");
+    return;
+  }
+  f.classList.remove("no-measure");
+  // body height is content-driven; documentElement would include the frame itself
+  const h = Math.ceil(doc.body.scrollHeight) + 2;
+  if (h > 40 && Math.abs(h - frameHeightSet) > 4) {
+    frameHeightSet = h;
+    f.style.height = h + "px";
+  }
+};
+
+const watchHtmlFrame = () => {
+  const f = $("htmlFrame");
+  if (frameObserver) {
+    try { frameObserver.disconnect(); } catch (e) {}
+    frameObserver = null;
+  }
+  fitHtmlFrame();
+  let doc = null;
+  try { doc = f.contentDocument; } catch (e) { doc = null; }
+  if (!doc) return;
+  doc.querySelectorAll("img").forEach((img) => {
+    img.addEventListener("load", fitHtmlFrame);
+    img.addEventListener("error", fitHtmlFrame);
+  });
+  if (window.ResizeObserver && doc.documentElement) {
+    try {
+      frameObserver = new ResizeObserver(() => fitHtmlFrame());
+      frameObserver.observe(doc.documentElement);
+    } catch (e) {}
+  }
+  setTimeout(fitHtmlFrame, 250);
+  setTimeout(fitHtmlFrame, 1200);
+};
+
+$("htmlFrame").addEventListener("load", watchHtmlFrame);
+
+function setBodyView(view, body, allowImages) {
+  const hasHtml = !!body.html;
+  const hasText = !!body.text;
+  $("tabHtml").classList.toggle("active", view === "html");
+  $("tabText").classList.toggle("active", view === "text");
+  $("bodyTabs").classList.toggle("hidden", !(hasHtml && hasText));
+  if (view === "html" && hasHtml) {
+    const built = buildHtmlDoc(body.html, allowImages);
+    frameHeightSet = 0;
+    $("htmlFrame").style.height = "240px";
+    $("htmlFrame").srcdoc = built.html;
+    $("htmlFrame").classList.remove("hidden");
+    $("modalBody").classList.add("hidden");
+    $("imgToggleBtn").dataset.allowed = allowImages ? "1" : "0";
+    if (built.remoteCount > 0) {
+      $("imgToggleBtn").classList.remove("hidden");
+      $("imgToggleBtn").textContent = allowImages
+        ? `画像を隠す（${built.remoteCount}件）`
+        : `画像を表示（${built.remoteCount}件）`;
+    } else {
+      $("imgToggleBtn").classList.add("hidden");
+    }
+    $("bodySwitcher").classList.toggle("hidden", !(hasText || built.remoteCount > 0));
+  } else {
+    $("htmlFrame").classList.add("hidden");
+    $("modalBody").classList.remove("hidden");
+    $("modalBody").textContent = hasText
+      ? body.text
+      : (hasHtml ? "（テキスト版がありません。HTMLタブを選択してください）" : "（本文はありません）");
+    $("imgToggleBtn").classList.add("hidden");
+    $("bodySwitcher").classList.toggle("hidden", !hasHtml);
+  }
+}
+
+const openMessage = async (id) => {
+  try {
+    const m = await apiCall("/messages/" + id);
+    state.currentMessageId = id;
+    const aesKey = await getAesKeyForMessage(m);
+    const meta = JSON.parse(await aesDecrypt(aesKey, m.meta_iv, m.meta_encrypted));
+    const body = JSON.parse(await aesDecrypt(aesKey, m.body_iv, m.body_encrypted));
+    state.currentBody = body;
+    $("modalSubject").textContent = meta.subject || "（件名なし）";
+    $("modalMeta").innerHTML = `
+      <div class="meta-from">${escapeHtml(meta.from_name ? `${meta.from_name} <${meta.from_addr}>` : (meta.from_addr || "不明な送信者"))}</div>
+      <div>${escapeHtml(meta.to_addr || state.address)}・${escapeHtml(new Date(m.received_at).toLocaleString("ja-JP"))}</div>
+    `;
+
+    if (body.html) setBodyView("html", body, true);
+    else setBodyView("text", body, false);
+
+    $("modalScroll").scrollTop = 0;
+    openModal();
+    const row = state.raw.find((x) => x.id === id);
+    if (row && !row.seen) {
+      row.seen = 1;
+      state.lastMsgSig = null;
+      await renderMessages(state.raw);
+    }
+    refreshMessages();
+  } catch (err) {
+    showToast("復号に失敗しました");
+  }
+};
+
+$("notifBtn").addEventListener("click", () => {
+  if (state.pushSubscribed) {
+    if (confirm("プッシュ通知を停止しますか？")) disablePush();
+  } else {
+    enablePush();
+  }
+});
+
+$("copyBtn").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(state.address);
+  showToast("コピーしました");
+});
+$("refreshBtn").addEventListener("click", refreshMessages);
+$("logoutBtn").addEventListener("click", async () => {
+  if (!confirm("ログアウトしてもよろしいですか？")) return;
+  try { await apiCall("/logout", { method: "POST" }); } catch (e) {}
+  exitApp();
+});
+$("deleteAccBtn").addEventListener("click", async () => {
+  if (!confirm("アカウントとすべてのメールを完全に削除します。\nこの操作は取り消せません。本当によろしいですか？")) return;
+  try {
+    await apiCall("/me", { method: "DELETE" });
+    showToast("アカウントを削除しました");
+    exitApp();
+  } catch (err) {
+    showToast("削除に失敗しました: " + err.message);
+  }
+});
+$("modalClose").addEventListener("click", () => closeModal());
+$("modalDeleteBtn").addEventListener("click", async () => {
+  if (!state.currentMessageId) return;
+  if (!confirm("このメールを削除しますか？")) return;
+  try {
+    await apiCall("/messages/" + state.currentMessageId, { method: "DELETE" });
+    removeLocalMessages([state.currentMessageId]);
+    closeModal();
+    showToast("削除しました");
+    await renderMessages(state.raw);
+    refreshMessages();
+  } catch (e) {
+    showToast("削除に失敗しました");
+  }
+});
+
+$("tabHtml").addEventListener("click", () => {
+  if (state.currentBody) setBodyView("html", state.currentBody, $("imgToggleBtn").dataset.allowed !== "0");
+});
+$("tabText").addEventListener("click", () => {
+  if (state.currentBody) setBodyView("text", state.currentBody, false);
+});
+$("imgToggleBtn").addEventListener("click", () => {
+  if (!state.currentBody) return;
+  const cur = $("imgToggleBtn").dataset.allowed === "1";
+  setBodyView("html", state.currentBody, !cur);
+});
+
+// ALIASES
+const renderAliases = (aliases) => {
+  const el = $("aliasList");
+  if (!aliases || aliases.length === 0) {
+    el.innerHTML = '<div class="alias-empty">匿名アドレスはまだありません</div>';
+    return;
+  }
+  el.innerHTML = aliases.map((a) => `
+    <div class="alias-item" data-address="${escapeHtml(a.address)}">
+      <div class="addr">${escapeHtml(a.address)}</div>
+      <div class="created">${formatTime(a.created_at)}</div>
+      <button class="icon-btn alias-copy" title="コピー" aria-label="アドレスをコピー">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+      <button class="icon-btn alias-delete" title="削除" aria-label="削除">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </button>
+    </div>
+  `).join("");
+  el.querySelectorAll(".alias-copy").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const addr = btn.closest(".alias-item").dataset.address;
+      try {
+        await navigator.clipboard.writeText(addr);
+        showToast("コピーしました");
+      } catch (e) {
+        showToast("コピーに失敗しました");
+      }
+    });
+  });
+  el.querySelectorAll(".alias-delete").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const addr = btn.closest(".alias-item").dataset.address;
+      if (!confirm("この匿名アドレスを削除しますか？\n以後このアドレス宛のメールは届かなくなります。")) return;
+      try {
+        await apiCall("/aliases/" + encodeURIComponent(addr), { method: "DELETE" });
+        await loadAliases();
+      } catch (e) {
+        showToast("削除に失敗しました");
+      }
+    });
+  });
+};
+
+const loadAliases = async () => {
+  try {
+    const { aliases } = await apiCall("/aliases");
+    renderAliases(aliases);
+  } catch (e) {
+    showToast("匿名アドレスの取得に失敗しました");
+  }
+};
+
+$("aliasBtn").addEventListener("click", async () => {
+  openModal("aliasModal");
+  await loadAliases();
+});
+$("aliasModalClose").addEventListener("click", () => closeModal("aliasModal"));
+$("createAliasBtn").addEventListener("click", async () => {
+  const btn = $("createAliasBtn");
+  btn.disabled = true;
+  try {
+    await apiCall("/aliases", { method: "POST" });
+    await loadAliases();
+    showToast("匿名アドレスを生成しました");
+  } catch (e) {
+    showToast("生成に失敗しました");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ACCOUNT
+const maskedPassword = () => "•".repeat(Math.min((state.password || "").length, 16));
+
+const renderAccountPanel = () => {
+  const hasPw = typeof state.password === "string" && state.password.length > 0;
+  state.pwRevealed = false;
+  $("accAddr").textContent = state.address || "";
+  const pwEl = $("accPw");
+  pwEl.textContent = hasPw ? maskedPassword() : "この端末には保存されていません";
+  pwEl.classList.toggle("masked", hasPw);
+  $("accPwToggle").disabled = !hasPw;
+  $("accPwCopy").disabled = !hasPw;
+  $("accPwIconShow").classList.remove("hidden");
+  $("accPwIconHide").classList.add("hidden");
+  $("accPwHelper").textContent = hasPw
+    ? "この端末に保存されているパスワードです。サーバーにはハッシュのみが保存されています。"
+    : "パスワードはこの端末に保存されていません。次回ログイン時、またはパスワード変更後から表示できます。";
+  $("pwChangeForm").reset();
+  $("curPwInput").value = hasPw ? state.password : "";
+  $("pwChangeError").classList.add("hidden");
+};
+
+$("settingsBtn").addEventListener("click", () => {
+  renderAccountPanel();
+  $("pwChangeForm").classList.add("hidden");
+  $("pwChangeToggle").textContent = "パスワードを変更";
+  openModal("accountModal");
+});
+$("accountModalClose").addEventListener("click", () => closeModal("accountModal"));
+$("accountModal").addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeModal("accountModal");
+});
+
+$("accPwToggle").addEventListener("click", () => {
+  if (!state.password) return;
+  state.pwRevealed = !state.pwRevealed;
+  const pwEl = $("accPw");
+  pwEl.textContent = state.pwRevealed ? state.password : maskedPassword();
+  pwEl.classList.toggle("masked", !state.pwRevealed);
+  $("accPwIconShow").classList.toggle("hidden", state.pwRevealed);
+  $("accPwIconHide").classList.toggle("hidden", !state.pwRevealed);
+  const label = state.pwRevealed ? "パスワードを隠す" : "パスワードを表示";
+  $("accPwToggle").setAttribute("title", label);
+  $("accPwToggle").setAttribute("aria-label", label);
+});
+
+$("accPwCopy").addEventListener("click", async () => {
+  if (!state.password) return;
+  try {
+    await navigator.clipboard.writeText(state.password);
+    showToast("パスワードをコピーしました");
+  } catch (e) {
+    showToast("コピーに失敗しました");
+  }
+});
+
+$("accAddrCopy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(state.address || "");
+    showToast("コピーしました");
+  } catch (e) {
+    showToast("コピーに失敗しました");
+  }
+});
+
+document.querySelectorAll("[data-pwtoggle]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = $(btn.dataset.pwtoggle);
+    input.type = input.type === "password" ? "text" : "password";
+    btn.setAttribute("aria-label", input.type === "password" ? "パスワードを表示" : "パスワードを隠す");
+  });
+});
+
+$("pwChangeToggle").addEventListener("click", () => {
+  const form = $("pwChangeForm");
+  const opened = !form.classList.toggle("hidden");
+  $("pwChangeToggle").textContent = opened ? "変更をやめる" : "パスワードを変更";
+  $("pwChangeError").classList.add("hidden");
+  if (opened) {
+    $("curPwInput").value = state.password || "";
+    setTimeout(() => {
+      try { form.scrollIntoView({ block: "end", behavior: "smooth" }); } catch (e) {}
+    }, 60);
+  }
+});
+
+$("pwChangeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const showPwError = (msg) => {
+    $("pwChangeError").textContent = msg;
+    $("pwChangeError").classList.remove("hidden");
+  };
+  $("pwChangeError").classList.add("hidden");
+
+  const cur = $("curPwInput").value;
+  const next = $("newPwInput").value;
+  const next2 = $("newPwInput2").value;
+  if (cur.length < 8) return showPwError("現在のパスワードをご入力ください。");
+  if (next.length < 8) return showPwError("新しいパスワードは8文字以上でご設定ください。");
+  if (next !== next2) return showPwError("新しいパスワードが一致しません。");
+  if (next === cur) return showPwError("現在のパスワードと同じです。");
+
+  const btn = $("pwChangeSubmit");
+  const label = btn.textContent;
+  btn.disabled = true;
+  try {
+    btn.textContent = "暗号鍵を再暗号化中…";
+    const acc = await apiCall("/me");
+    let pkcs8;
+    try {
+      pkcs8 = await decryptPrivateKeyPkcs8(cur, acc.encrypted_private_key, acc.pk_iv, acc.kdf_salt);
+    } catch (e2) {
+      showPwError("現在のパスワードが正しくありません。");
+      return;
+    }
+    const km = await rewrapPrivateKey(pkcs8, next);
+    btn.textContent = "更新中…";
+    await apiCall("/password", {
+      method: "POST",
+      body: { current_password: cur, new_password: next, ...km },
+    });
+    state.password = next;
+    await idbPut("account_password", next);
+    $("pwChangeForm").classList.add("hidden");
+    $("pwChangeToggle").textContent = "パスワードを変更";
+    renderAccountPanel();
+    showToast("パスワードを変更しました");
+  } catch (err) {
+    showPwError(
+      err.status === 401
+        ? "現在のパスワードが正しくありません。"
+        : err.message || "変更に失敗しました。"
+    );
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+// INIT
+(async () => {
+  if (MIGRATION_TO && LEGACY_HOSTS.includes(location.hostname)) {
+    $("migrateDomain").textContent = MIGRATION_TO;
+    $("migrateLink").href = "https://" + MIGRATION_TO + "/";
+    $("migrateBanner").classList.remove("hidden");
+  }
+
+  if ("serviceWorker" in navigator) {
+    try {
+      state.swReg = await navigator.serviceWorker.register("/sw.js");
+    } catch (e) {}
+  }
+
+  try {
+    const { domains } = await fetch(API_BASE + "/domains").then(r => r.json());
+    if (domains && domains.length > 0) {
+      state.domain = domains[0];
+      $("domainText").textContent = domains[0];
+    }
+  } catch (e) {}
+
+  if (state.token && state.address) {
+    try {
+      const me = await apiCall("/me");
+      if (me && me.address && me.address !== state.address) {
+        state.address = me.address;
+        localStorage.setItem("xiefy_addr", me.address);
+      }
+      const stored = await idbGet("private_key");
+      if (stored) {
+        state.privateKey = stored;
+        state.password = await idbGet("account_password");
+        enterApp();
+        return;
+      }
+      // session valid but no key in IDB → require re-login
+      localStorage.removeItem("xiefy_token");
+      state.token = null;
+      $("addressInput").value = state.address.split("@")[0];
+      setTab("login");
+      showAuthError("セキュリティのため、再度ログインしてください。");
+      return;
+    } catch (e) {
+      localStorage.removeItem("xiefy_token");
+      localStorage.removeItem("xiefy_addr");
+      await idbClear();
+      state.token = null;
+      state.address = null;
+      state.privateKey = null;
+    }
+  }
+  setTab("login");
+})();
+</script>
+</body>
+</html>

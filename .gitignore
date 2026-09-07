@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+*.log
+*.bak
+*.sql.gz
+dump*.sql
+export*.sql
+UsersNasu*scratchpad_check.js
