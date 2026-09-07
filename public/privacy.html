@@ -100,6 +100,14 @@
   .btn.primary:hover { background: var(--accent-hover); text-decoration: none; }
   .btn.ghost { border: 1px solid var(--border); color: var(--text); }
   .btn.ghost:hover { background: var(--surface-2); text-decoration: none; }
+  .btn.more {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+    font-family: inherit; cursor: pointer; color: var(--accent);
+    border: 1px solid var(--border); background: transparent;
+  }
+  .btn.more:hover { background: var(--accent-soft); }
+  .btn.more svg { width: 15px; height: 15px; }
+  #detail[hidden] { display: none; }
 
   section { padding: 2.25rem 0; border-bottom: 1px solid var(--divider); }
   section:last-of-type { border-bottom: none; }
@@ -218,11 +226,16 @@
       そして、その主張を確かめられるように<strong>全ソースコードを公開</strong>しています。
     </p>
     <div class="cta">
+      <button class="btn ghost more" id="moreBtn" type="button">
+        詳しく読む
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
       <a class="btn primary" href="/">無料でアドレスを作る</a>
       <a class="btn ghost" href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">ソースコードを見る</a>
     </div>
   </div>
 
+  <div id="detail" hidden>
   <section>
     <h2>なぜ「読めない」のか</h2>
     <p>
@@ -332,6 +345,7 @@
     <p class="muted" style="margin-bottom:1.3rem;">アドレスとパスワードを決めるだけ。メールアドレスの登録も、本人確認もありません。</p>
     <a class="btn primary" href="/">アドレスを作る</a>
   </section>
+  </div>
 
   <footer>
     AnonBox Mail — <a href="/">anonbox.email</a> ・
@@ -339,5 +353,27 @@
   </footer>
 
 </main>
+
+<script>
+  (function () {
+    var btn = document.getElementById("moreBtn");
+    var detail = document.getElementById("detail");
+    if (!btn || !detail) return;
+    btn.addEventListener("click", function () {
+      detail.hidden = false;
+      btn.remove();
+      try {
+        detail.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (e) {
+        detail.scrollIntoView();
+      }
+    });
+    // anyone arriving with a link to a section should see it straight away
+    if (location.hash && location.hash.length > 1) {
+      detail.hidden = false;
+      btn.remove();
+    }
+  })();
+</script>
 </body>
 </html>
