@@ -21,7 +21,13 @@ const DOMAIN = "anonbox.email";         // primary domain shown to users
 const LEGACY_DOMAINS = ["xiefy.site"];  // old domains that keep receiving / logging in
 const ALL_DOMAINS = [DOMAIN, ...LEGACY_DOMAINS];
 const SESSION_TTL_MS = 90 * 24 * 3600 * 1000;
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 100000;   // server-side hardening of the client's verifier
+const AUTH_VERSION = 2;             // v2 = the password never reaches the server
+
+// login throttling
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const RATE_MAX_FAILS = 8;
+const RATE_BLOCK_MS = 15 * 60 * 1000;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -111,7 +117,68 @@ async function verifyPassword(password, hash, saltHex) {
 }
 
 const isValidInbox = (s) => /^[a-z0-9._-]{3,32}$/.test(s);
+// only the legacy (v1) login path still sees a password
 const isValidPassword = (s) => typeof s === "string" && s.length >= 8 && s.length <= 128;
+// v2 clients send PBKDF2/HKDF output, never the password itself
+const isAuthVerifier = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
+
+// ===== login throttling =====
+
+const clientIp = (req) => req.headers.get("CF-Connecting-IP") || "unknown";
+
+async function throttleCheck(env, keys) {
+  const now = Date.now();
+  for (const key of keys) {
+    const row = await env.DB.prepare(
+      `SELECT blocked_until FROM login_attempts WHERE key = ?`
+    )
+      .bind(key)
+      .first();
+    if (row && row.blocked_until > now) {
+      return Math.ceil((row.blocked_until - now) / 1000);
+    }
+  }
+  return 0;
+}
+
+async function throttleFail(env, keys) {
+  const now = Date.now();
+  for (const key of keys) {
+    const row = await env.DB.prepare(
+      `SELECT fails, first_at FROM login_attempts WHERE key = ?`
+    )
+      .bind(key)
+      .first();
+    if (!row || now - row.first_at > RATE_WINDOW_MS) {
+      await env.DB.prepare(
+        `INSERT INTO login_attempts (key, fails, first_at, blocked_until) VALUES (?, 1, ?, 0)
+         ON CONFLICT(key) DO UPDATE SET fails = 1, first_at = excluded.first_at, blocked_until = 0`
+      )
+        .bind(key, now)
+        .run();
+      continue;
+    }
+    const fails = row.fails + 1;
+    const blockedUntil = fails >= RATE_MAX_FAILS ? now + RATE_BLOCK_MS : 0;
+    await env.DB.prepare(
+      `UPDATE login_attempts SET fails = ?, blocked_until = ? WHERE key = ?`
+    )
+      .bind(fails, blockedUntil, key)
+      .run();
+  }
+}
+
+async function throttleReset(env, keys) {
+  for (const key of keys) {
+    await env.DB.prepare(`DELETE FROM login_attempts WHERE key = ?`).bind(key).run();
+  }
+}
+
+const tooManyAttempts = (retryAfter) =>
+  new Response(JSON.stringify({ error: "too many attempts", retry_after: retryAfter }), {
+    status: 429,
+    headers: { "Content-Type": "application/json", "Retry-After": String(retryAfter), ...CORS },
+  });
 
 const ALIAS_LOCAL_LENGTH = 15;
 const isValidAliasLocal = (s) => /^[0-9]{15}$/.test(s);
@@ -485,6 +552,9 @@ export default {
       env.DB.prepare(
         `DELETE FROM messages WHERE account_id NOT IN (SELECT id FROM accounts)`
       ),
+      env.DB.prepare(`DELETE FROM login_attempts WHERE first_at < ?`).bind(
+        Date.now() - RATE_WINDOW_MS * 4
+      ),
     ]);
   },
 
@@ -510,7 +580,10 @@ export default {
         const parsed = parseAddress(body.address);
         if (!parsed) return err("invalid address (use name@" + DOMAIN + ", name=3-32 chars)");
         if (!isValidInbox(parsed.inbox)) return err("invalid inbox name");
-        if (!isValidPassword(body.password)) return err("password must be 8-128 chars");
+        if (!isAuthVerifier(body.auth_verifier)) return err("invalid auth verifier");
+        const signupKeys = ["ip:" + clientIp(req)];
+        const signupWait = await throttleCheck(env, signupKeys);
+        if (signupWait) return tooManyAttempts(signupWait);
         if (
           typeof body.public_key !== "string" ||
           typeof body.encrypted_private_key !== "string" ||
@@ -523,14 +596,19 @@ export default {
         const existing = await env.DB.prepare(`SELECT 1 FROM accounts WHERE inbox = ?`)
           .bind(parsed.inbox)
           .first();
-        if (existing) return err("address already taken", 409);
+        if (existing) {
+          await throttleFail(env, signupKeys);
+          return err("address already taken", 409);
+        }
 
-        const { hash, salt } = await hashPassword(body.password);
+        // the verifier is already a slow-KDF output; hashing it again means a
+        // database leak does not hand out working credentials
+        const { hash, salt } = await hashPassword(body.auth_verifier);
         const id = crypto.randomUUID();
         const now = Date.now();
         await env.DB.prepare(
-          `INSERT INTO accounts (id, address, inbox, password_hash, password_salt, public_key, encrypted_private_key, pk_iv, kdf_salt, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO accounts (id, address, inbox, password_hash, password_salt, public_key, encrypted_private_key, pk_iv, kdf_salt, auth_version, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             id,
@@ -542,6 +620,7 @@ export default {
             body.encrypted_private_key,
             body.pk_iv,
             body.kdf_salt,
+            AUTH_VERSION,
             now
           )
           .run();
@@ -551,16 +630,45 @@ export default {
       if (path === "/api/token" && req.method === "POST") {
         const body = await req.json().catch(() => ({}));
         const parsed = parseAddress(body.address);
-        if (!parsed || !isValidPassword(body.password)) return err("invalid credentials", 401);
+        if (!parsed) return err("invalid credentials", 401);
+
+        const keys = ["login:" + parsed.inbox, "ip:" + clientIp(req)];
+        const wait = await throttleCheck(env, keys);
+        if (wait) return tooManyAttempts(wait);
 
         const account = await env.DB.prepare(
-          `SELECT id, password_hash, password_salt, encrypted_private_key, pk_iv, kdf_salt FROM accounts WHERE inbox = ?`
+          `SELECT id, password_hash, password_salt, encrypted_private_key, pk_iv, kdf_salt, auth_version
+           FROM accounts WHERE inbox = ?`
         )
           .bind(parsed.inbox)
           .first();
-        if (!account) return err("invalid credentials", 401);
-        const ok = await verifyPassword(body.password, account.password_hash, account.password_salt);
-        if (!ok) return err("invalid credentials", 401);
+        if (!account) {
+          await throttleFail(env, keys);
+          return err("invalid credentials", 401);
+        }
+
+        const version = account.auth_version || 1;
+        let ok = false;
+
+        if (isAuthVerifier(body.auth_verifier)) {
+          if (version !== AUTH_VERSION) {
+            // this account still holds a v1 hash; tell the client to fall back once
+            return json({ error: "legacy_auth", auth_version: version }, 401);
+          }
+          ok = await verifyPassword(body.auth_verifier, account.password_hash, account.password_salt);
+        } else if (isValidPassword(body.password)) {
+          // legacy path, only for accounts that have not been upgraded yet
+          if (version !== 1) return err("invalid credentials", 401);
+          ok = await verifyPassword(body.password, account.password_hash, account.password_salt);
+        } else {
+          return err("invalid credentials", 401);
+        }
+
+        if (!ok) {
+          await throttleFail(env, keys);
+          return err("invalid credentials", 401);
+        }
+        await throttleReset(env, keys);
 
         const session = await createSession(env, account.id);
         return json({
@@ -570,6 +678,7 @@ export default {
           encrypted_private_key: account.encrypted_private_key,
           pk_iv: account.pk_iv,
           kdf_salt: account.kdf_salt,
+          auth_version: version,
         });
       }
 
@@ -610,11 +719,39 @@ export default {
         return json({ ok: true });
       }
 
+      // one-time move of a v1 account onto v2, right after a successful legacy login
+      if (path === "/api/auth/upgrade" && req.method === "POST") {
+        if (!me) return err("unauthorized", 401);
+        const body = await req.json().catch(() => ({}));
+        if (!isAuthVerifier(body.auth_verifier)) return err("invalid auth verifier");
+        if (
+          typeof body.encrypted_private_key !== "string" ||
+          typeof body.pk_iv !== "string" ||
+          typeof body.kdf_salt !== "string"
+        ) {
+          return err("missing crypto material");
+        }
+        const acc = await env.DB.prepare(`SELECT auth_version FROM accounts WHERE id = ?`)
+          .bind(me.account_id)
+          .first();
+        if (!acc) return err("unauthorized", 401);
+        if ((acc.auth_version || 1) === AUTH_VERSION) return json({ ok: true, already: true });
+
+        const { hash, salt } = await hashPassword(body.auth_verifier);
+        await env.DB.prepare(
+          `UPDATE accounts SET password_hash = ?, password_salt = ?, encrypted_private_key = ?, pk_iv = ?, kdf_salt = ?, auth_version = ?
+           WHERE id = ?`
+        )
+          .bind(hash, salt, body.encrypted_private_key, body.pk_iv, body.kdf_salt, AUTH_VERSION, me.account_id)
+          .run();
+        return json({ ok: true, auth_version: AUTH_VERSION });
+      }
+
       if (path === "/api/password" && req.method === "POST") {
         if (!me) return err("unauthorized", 401);
         const body = await req.json().catch(() => ({}));
-        if (!isValidPassword(body.current_password)) return err("invalid credentials", 401);
-        if (!isValidPassword(body.new_password)) return err("password must be 8-128 chars");
+        if (!isAuthVerifier(body.current_verifier)) return err("invalid credentials", 401);
+        if (!isAuthVerifier(body.new_verifier)) return err("invalid auth verifier");
         if (
           typeof body.encrypted_private_key !== "string" ||
           typeof body.pk_iv !== "string" ||
@@ -624,15 +761,18 @@ export default {
         }
 
         const acc = await env.DB.prepare(
-          `SELECT password_hash, password_salt FROM accounts WHERE id = ?`
+          `SELECT password_hash, password_salt, auth_version FROM accounts WHERE id = ?`
         )
           .bind(me.account_id)
           .first();
         if (!acc) return err("unauthorized", 401);
-        const ok = await verifyPassword(body.current_password, acc.password_hash, acc.password_salt);
+        if ((acc.auth_version || 1) !== AUTH_VERSION) {
+          return err("please sign in again before changing your password", 409);
+        }
+        const ok = await verifyPassword(body.current_verifier, acc.password_hash, acc.password_salt);
         if (!ok) return err("current password is incorrect", 401);
 
-        const { hash, salt } = await hashPassword(body.new_password);
+        const { hash, salt } = await hashPassword(body.new_verifier);
         await env.DB.batch([
           env.DB.prepare(
             `UPDATE accounts SET password_hash = ?, password_salt = ?, encrypted_private_key = ?, pk_iv = ?, kdf_salt = ?

@@ -650,16 +650,16 @@
 
 <dialog id="modal">
   <div class="modal-head mail-head">
-    <button class="modal-close" id="modalClose" aria-label="閉じる">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-    </button>
     <button class="icon-btn mail-delete" id="modalDeleteBtn" title="削除する" aria-label="削除する">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    </button>
+    <button class="modal-close" id="modalClose" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
     </button>
   </div>
@@ -808,6 +808,7 @@ const API_BASE = (location.hostname === "localhost" || location.hostname === "12
   : "https://" + API_HOST + "/api";
 
 const $ = (id) => document.getElementById(id);
+const MIN_NEW_PASSWORD = 12;
 const state = {
   tab: "login",
   token: localStorage.getItem("xiefy_token") || null,
@@ -906,6 +907,85 @@ const bytesToB64 = (bytes) => {
 
 // ===== E2EE crypto =====
 
+// auth v2: one slow derivation, then two domain-separated sub-keys.
+// the wrap key never leaves this device; only the verifier is sent to the server.
+const KDF_ITERATIONS = 600000;
+const AUTH_VERSION = 2;
+
+const bytesToHex = (bytes) =>
+  Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+
+const sha256Bytes = async (str) =>
+  new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)));
+
+// deterministic per-address salt, so no round trip is needed before logging in
+const masterSaltFor = (address) => sha256Bytes("anonbox.kdf.v2:" + address.trim().toLowerCase());
+
+async function deriveAuthMaterial(password, address) {
+  const salt = await masterSaltFor(address);
+  const base = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const masterBits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: KDF_ITERATIONS, hash: "SHA-256" },
+    base,
+    256
+  );
+  const master = await crypto.subtle.importKey("raw", masterBits, "HKDF", false, [
+    "deriveKey",
+    "deriveBits",
+  ]);
+  const info = (s) => new TextEncoder().encode(s);
+  const wrapKey = await crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: info("anonbox.wrap.v2") },
+    master,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+  const verifierBits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: info("anonbox.auth.v2") },
+    master,
+    256
+  );
+  return {
+    wrapKey,
+    verifier: bytesToHex(new Uint8Array(verifierBits)),
+    kdfSalt: bytesToB64(salt),
+  };
+}
+
+async function wrapPrivateKeyWith(wrapKey, pkcs8, kdfSalt) {
+  const pkIv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: pkIv }, wrapKey, pkcs8)
+  );
+  return {
+    encrypted_private_key: bytesToB64(encrypted),
+    pk_iv: bytesToB64(pkIv),
+    kdf_salt: kdfSalt,
+  };
+}
+
+async function unwrapPrivateKeyWith(wrapKey, encryptedB64, ivB64) {
+  const pkcs8 = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(ivB64) },
+    wrapKey,
+    b64ToBytes(encryptedB64)
+  );
+  return {
+    pkcs8,
+    key: await crypto.subtle.importKey("pkcs8", pkcs8, { name: "RSA-OAEP", hash: "SHA-256" }, false, [
+      "decrypt",
+    ]),
+  };
+}
+
+// legacy (v1) helper: kept only to migrate accounts created before auth v2
 async function deriveKeyFromPassword(password, saltBytes) {
   const baseKey = await crypto.subtle.importKey(
     "raw",
@@ -1160,6 +1240,7 @@ const apiCall = async (path, opts = {}) => {
   if (!res.ok) {
     const e = new Error(data.error || ("HTTP " + res.status));
     e.status = res.status;
+    e.body = data;
     throw e;
   }
   return data;
@@ -1173,7 +1254,7 @@ const setTab = (tab) => {
   $("submitBtn").textContent = tab === "login" ? "ログインする" : "アカウントを作成する";
   $("pwHelper").textContent = tab === "login"
     ? "登録時に設定したパスワードをご入力ください。"
-    : "8文字以上でご設定ください。";
+    : `${MIN_NEW_PASSWORD}文字以上でご設定ください。忘れると復旧できません。`;
   $("passwordInput").setAttribute("autocomplete", tab === "login" ? "current-password" : "new-password");
   $("authError").classList.add("hidden");
 };
@@ -1212,29 +1293,75 @@ $("authForm").addEventListener("submit", async (e) => {
     showAuthError("メールアドレスは3〜32文字、半角英数字と「. _ -」のみご利用いただけます。");
     return;
   }
+  if (state.tab === "signup" && password.length < MIN_NEW_PASSWORD) {
+    showAuthError(`パスワードは${MIN_NEW_PASSWORD}文字以上でご設定ください。`);
+    return;
+  }
   const address = local + "@" + state.domain;
   const btn = $("submitBtn");
   btn.disabled = true;
   const originalLabel = btn.textContent;
   try {
+    btn.textContent = "鍵を準備中…";
+    const auth = await deriveAuthMaterial(password, address);
+
     if (state.tab === "signup") {
       btn.textContent = "暗号鍵を生成中…";
-      const km = await setupKeyMaterial(password);
+      const keyPair = await generateRsaKeyPair();
+      const spki = new Uint8Array(await crypto.subtle.exportKey("spki", keyPair.publicKey));
+      const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+      const wrapped = await wrapPrivateKeyWith(auth.wrapKey, pkcs8, auth.kdfSalt);
       btn.textContent = "アカウントを作成中…";
       await apiCall("/accounts", {
         method: "POST",
-        body: { address, password, ...km },
+        body: { address, auth_verifier: auth.verifier, public_key: bytesToB64(spki), ...wrapped },
       });
     }
+
     btn.textContent = "ログイン中…";
-    const tk = await apiCall("/token", { method: "POST", body: { address, password } });
+    let tk;
+    let legacy = false;
+    try {
+      tk = await apiCall("/token", {
+        method: "POST",
+        body: { address, auth_verifier: auth.verifier },
+      });
+    } catch (e) {
+      if (e.status === 401 && e.body && e.body.error === "legacy_auth") {
+        // account predates auth v2: authenticate the old way once, then upgrade
+        legacy = true;
+        tk = await apiCall("/token", { method: "POST", body: { address, password } });
+      } else {
+        throw e;
+      }
+    }
+
     btn.textContent = "暗号鍵を復号中…";
-    const priv = await unwrapPrivateKey(
-      password,
-      tk.encrypted_private_key,
-      tk.pk_iv,
-      tk.kdf_salt
-    );
+    let priv;
+    if (legacy) {
+      const pkcs8 = await decryptPrivateKeyPkcs8(
+        password,
+        tk.encrypted_private_key,
+        tk.pk_iv,
+        tk.kdf_salt
+      );
+      priv = await crypto.subtle.importKey(
+        "pkcs8",
+        pkcs8,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        false,
+        ["decrypt"]
+      );
+      btn.textContent = "暗号方式を更新中…";
+      const rewrapped = await wrapPrivateKeyWith(auth.wrapKey, pkcs8, auth.kdfSalt);
+      state.token = tk.token;
+      await apiCall("/auth/upgrade", {
+        method: "POST",
+        body: { auth_verifier: auth.verifier, ...rewrapped },
+      });
+    } else {
+      priv = (await unwrapPrivateKeyWith(auth.wrapKey, tk.encrypted_private_key, tk.pk_iv)).key;
+    }
     state.privateKey = priv;
     state.token = tk.token;
     state.address = address;
@@ -1247,6 +1374,10 @@ $("authForm").addEventListener("submit", async (e) => {
     enterApp();
   } catch (err) {
     if (err.status === 409) showAuthError("このメールアドレスはすでに使用されています。");
+    else if (err.status === 429)
+      showAuthError(
+        `試行回数が多すぎます。${Math.ceil((err.body?.retry_after || 900) / 60)}分ほど時間をおいてからお試しください。`
+      );
     else if (err.status === 401) showAuthError("メールアドレスまたはパスワードが正しくありません。");
     else if (err.name === "OperationError") showAuthError("パスワードが正しくありません。");
     else showAuthError(err.message || "エラーが発生しました。");
@@ -2156,7 +2287,8 @@ $("pwChangeForm").addEventListener("submit", async (e) => {
   const next = $("newPwInput").value;
   const next2 = $("newPwInput2").value;
   if (cur.length < 8) return showPwError("現在のパスワードをご入力ください。");
-  if (next.length < 8) return showPwError("新しいパスワードは8文字以上でご設定ください。");
+  if (next.length < MIN_NEW_PASSWORD)
+    return showPwError(`新しいパスワードは${MIN_NEW_PASSWORD}文字以上でご設定ください。`);
   if (next !== next2) return showPwError("新しいパスワードが一致しません。");
   if (next === cur) return showPwError("現在のパスワードと同じです。");
 
@@ -2166,18 +2298,21 @@ $("pwChangeForm").addEventListener("submit", async (e) => {
   try {
     btn.textContent = "暗号鍵を再暗号化中…";
     const acc = await apiCall("/me");
+    const address = state.address;
+    const oldAuth = await deriveAuthMaterial(cur, address);
     let pkcs8;
     try {
-      pkcs8 = await decryptPrivateKeyPkcs8(cur, acc.encrypted_private_key, acc.pk_iv, acc.kdf_salt);
+      pkcs8 = (await unwrapPrivateKeyWith(oldAuth.wrapKey, acc.encrypted_private_key, acc.pk_iv)).pkcs8;
     } catch (e2) {
       showPwError("現在のパスワードが正しくありません。");
       return;
     }
-    const km = await rewrapPrivateKey(pkcs8, next);
+    const newAuth = await deriveAuthMaterial(next, address);
+    const km = await wrapPrivateKeyWith(newAuth.wrapKey, pkcs8, newAuth.kdfSalt);
     btn.textContent = "更新中…";
     await apiCall("/password", {
       method: "POST",
-      body: { current_password: cur, new_password: next, ...km },
+      body: { current_verifier: oldAuth.verifier, new_verifier: newAuth.verifier, ...km },
     });
     state.password = next;
     await idbPut("account_password", next);

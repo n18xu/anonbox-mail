@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS login_attempts;
 DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS aliases;
 DROP TABLE IF EXISTS messages;
@@ -14,6 +15,7 @@ CREATE TABLE accounts (
   encrypted_private_key TEXT NOT NULL,
   pk_iv TEXT NOT NULL,
   kdf_salt TEXT NOT NULL,
+  auth_version INTEGER NOT NULL DEFAULT 2,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_accounts_inbox ON accounts(inbox);
@@ -56,3 +58,11 @@ CREATE TABLE aliases (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_aliases_account ON aliases(account_id, created_at DESC);
+
+CREATE TABLE login_attempts (
+  key TEXT PRIMARY KEY,
+  fails INTEGER NOT NULL DEFAULT 0,
+  first_at INTEGER NOT NULL,
+  blocked_until INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_login_attempts_blocked ON login_attempts(blocked_until);
