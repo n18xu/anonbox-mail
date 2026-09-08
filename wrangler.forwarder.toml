@@ -1,0 +1,15 @@
+# Deployed to the account that still owns xiefy.site.
+# Replaces the retired mail worker with a forwarder to anonbox.email.
+name = "xiefy-mail"
+main = "forwarder/worker.js"
+compatibility_date = "2026-05-01"
+workers_dev = false
+
+account_id = "8e40f7d01ac7ebb8e58d45933ba14c87"
+
+routes = [
+  { pattern = "api.xiefy.site", custom_domain = true }
+]
+
+[vars]
+FORWARD_URL = "https://api.anonbox.email/api/ingest"

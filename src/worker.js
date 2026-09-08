@@ -499,71 +499,83 @@ async function pushToAccount(env, accountId, payload) {
 
 // ===== Worker =====
 
-export default {
-  async email(message, env, ctx) {
-    const parts = (message.to || "").toLowerCase().split("@");
-    if (parts.length !== 2) return;
-    const inbox = parts[0];
+// Receiving a mail is the same work whether it arrived on this account's
+// Email Routing or was forwarded in from the old domain's worker.
+async function storeIncomingMail(env, ctx, recipient, rawBuf) {
+  const parts = String(recipient || "").toLowerCase().split("@");
+  if (parts.length !== 2) return { ok: false, status: 400, reason: "bad recipient" };
+  const inbox = parts[0];
 
-    let account = await env.DB.prepare(
-      `SELECT id, public_key FROM accounts WHERE inbox = ?`
+  let account = await env.DB.prepare(`SELECT id, public_key FROM accounts WHERE inbox = ?`)
+    .bind(inbox)
+    .first();
+
+  if (!account) {
+    account = await env.DB.prepare(
+      `SELECT acc.id as id, acc.public_key as public_key
+       FROM aliases al JOIN accounts acc ON acc.id = al.account_id
+       WHERE al.address = ?`
     )
       .bind(inbox)
       .first();
+  }
 
-    if (!account) {
-      account = await env.DB.prepare(
-        `SELECT acc.id as id, acc.public_key as public_key
-         FROM aliases al JOIN accounts acc ON acc.id = al.account_id
-         WHERE al.address = ?`
+  if (!account) return { ok: false, status: 404, reason: "address not in use" };
+
+  const parsed = await PostalMime.parse(rawBuf);
+  const from = parsed.from || {};
+  const toAddress = `${inbox}@${parts[1]}`;
+
+  const encrypted = await encryptMailForAccount(account.public_key, parsed, from, toAddress);
+
+  const msgId = crypto.randomUUID();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        msgId,
+        account.id,
+        encrypted.encrypted_aes_key,
+        encrypted.meta_iv,
+        encrypted.meta_encrypted,
+        encrypted.body_iv,
+        encrypted.body_encrypted,
+        Date.now()
       )
-        .bind(inbox)
-        .first();
-    }
+      .run();
+  } catch (e) {
+    console.error("failed to store mail", e?.message || String(e));
+    return { ok: false, status: 503, reason: "storage failure" };
+  }
 
-    if (!account) {
-      message.setReject?.("address not in use");
-      return;
-    }
+  ctx.waitUntil(
+    pushToAccount(env, account.id, {
+      title: "新着メール",
+      body: "受信トレイをご確認ください",
+      messageId: msgId,
+    })
+  );
+  return { ok: true, status: 200, id: msgId };
+}
 
+const timingSafeEqual = (a, b) => {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+};
+
+export default {
+  async email(message, env, ctx) {
     const buf = await new Response(message.raw).arrayBuffer();
-    const parsed = await PostalMime.parse(buf);
-    const from = parsed.from || {};
-    const toAddress = `${inbox}@${parts[1]}`;
-
-    const encrypted = await encryptMailForAccount(account.public_key, parsed, from, toAddress);
-
-    const msgId = crypto.randomUUID();
-    try {
-      await env.DB.prepare(
-        `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          msgId,
-          account.id,
-          encrypted.encrypted_aes_key,
-          encrypted.meta_iv,
-          encrypted.meta_encrypted,
-          encrypted.body_iv,
-          encrypted.body_encrypted,
-          Date.now()
-        )
-        .run();
-    } catch (e) {
+    const result = await storeIncomingMail(env, ctx, message.to, buf);
+    if (!result.ok) {
+      if (result.status === 404) message.setReject?.("address not in use");
       // bouncing is better than swallowing the mail without telling anyone
-      console.error("failed to store mail", e?.message || String(e));
-      message.setReject?.("temporary storage failure, please retry");
-      return;
+      else message.setReject?.("temporary storage failure, please retry");
     }
-
-    ctx.waitUntil(
-      pushToAccount(env, account.id, {
-        title: "新着メール",
-        body: "受信トレイをご確認ください",
-        messageId: msgId,
-      })
-    );
   },
 
   async scheduled(event, env, ctx) {
@@ -595,6 +607,21 @@ export default {
 
     try {
       if (path === "/api/health") return json({ ok: true });
+
+      // mail forwarded in from a domain that lives on another account
+      if (path === "/api/ingest" && req.method === "POST") {
+        if (!env.INGEST_KEY) return err("ingest not configured", 503);
+        if (!timingSafeEqual(req.headers.get("X-Ingest-Key") || "", env.INGEST_KEY)) {
+          return err("unauthorized", 401);
+        }
+        const recipient = req.headers.get("X-Ingest-To") || "";
+        const raw = await req.arrayBuffer();
+        if (!raw || raw.byteLength === 0) return err("empty message", 400);
+        if (raw.byteLength > 25 * 1024 * 1024) return err("message too large", 413);
+        const stored = await storeIncomingMail(env, ctx, recipient, raw);
+        if (!stored.ok) return err(stored.reason, stored.status);
+        return json({ ok: true, id: stored.id });
+      }
 
       if (path === "/api/domains" && req.method === "GET") {
         return json({ domains: ALL_DOMAINS });
