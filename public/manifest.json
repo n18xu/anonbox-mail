@@ -1,13 +1,13 @@
 {
-  "name": "Crypt Mail",
-  "short_name": "Crypt Mail",
-  "description": "アカウント制の使い捨てメールサービス",
+  "name": "AnonBox Mail",
+  "short_name": "AnonBox",
+  "description": "運営者にも読めない使い捨てメール",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#aecbff",
-  "theme_color": "#0a6cff",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
   "lang": "ja",
   "icons": [
     {

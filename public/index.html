@@ -11,10 +11,25 @@
 <link rel="apple-touch-icon" href="/icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Crypt Mail">
+<meta name="apple-mobile-web-app-title" content="AnonBox">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="運営者にも読めない使い捨てメール。届いたメールは保存される前に暗号化され、復号鍵はあなたのブラウザから出ません。登録に個人情報は不要、全ソースコードを公開しています。">
+<link rel="canonical" href="https://anonbox.email/">
+<meta property="og:site_name" content="AnonBox Mail">
+<meta property="og:title" content="運営者にも読めない、使い捨てのメールボックス — AnonBox Mail">
+<meta property="og:description" content="届いたメールは保存される前に暗号化。復号鍵はあなたのブラウザから出ません。登録は好きなアドレスとパスワードだけ。">
+<meta property="og:url" content="https://anonbox.email/">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://anonbox.email/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="運営者にも読めない、使い捨てのメールボックス — AnonBox Mail">
+<meta name="twitter:description" content="届いたメールは保存される前に暗号化。復号鍵はあなたのブラウザから出ません。登録は好きなアドレスとパスワードだけ。">
+<meta name="twitter:image" content="https://anonbox.email/og.png">
 <script src="/purify.min.js"></script>
-<title>Crypt Mail</title>
+<title>AnonBox Mail — 運営者にも読めない使い捨てメール</title>
 <style>
   :root {
     color-scheme: light;
@@ -501,7 +516,7 @@
 <!-- AUTH SCREEN -->
 <div id="authScreen" class="auth-wrap">
   <div class="auth-card">
-    <h1><span class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>Crypt <span class="accent">Mail</span></h1>
+    <h1><span class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span><span class="wordmark">Anon<span class="accent">Box</span></span></h1>
     <p class="lead">アカウント制の使い捨てメールサービスです。ログインしたユーザーのみが受信トレイを閲覧できます。</p>
 
     <div class="tabs" id="tabs">
@@ -551,7 +566,7 @@
 <!-- APP SCREEN -->
 <div id="appScreen" class="app hidden">
   <header class="topbar">
-    <div class="brand"><span class="brand-icon sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>Crypt <span class="accent">Mail</span></div>
+    <div class="brand"><span class="brand-icon sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7 L12 14 L22 7"/><rect x="10" y="13" width="4" height="4" rx="0.5" fill="currentColor"/><path d="M11 13 V11.5 a1 1 0 0 1 2 0 V13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span><span class="wordmark">Anon<span class="accent">Box</span></span></div>
     <div class="spacer"></div>
     <div class="addr" id="appAddr"></div>
     <div class="topbar-actions">
@@ -737,6 +752,22 @@
     </div>
 
     <hr class="section-sep">
+
+    <a class="source-link" id="privacyLink" href="/privacy" target="_blank" rel="noopener noreferrer" style="margin-bottom:0.6rem;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);">
+        <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      <div class="source-text">
+        <div class="source-title">プライバシーの仕組みを見る</div>
+        <div class="source-note">なぜ運営者にもメールを読めないのか</div>
+      </div>
+      <svg class="source-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+    </a>
 
     <a class="source-link" id="sourceLink" href="https://github.com/n18xu/anonbox-mail" target="_blank" rel="noopener noreferrer">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
