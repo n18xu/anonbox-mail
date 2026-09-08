@@ -871,6 +871,7 @@ const state = {
   aesKeyCache: new Map(),
   currentBody: null,
   password: null,
+  pendingRoute: null,
   decoded: [],
   raw: [],
   metaCache: new Map(),
@@ -1509,6 +1510,9 @@ const enterApp = async () => {
   $("appScreen").classList.remove("hidden");
   $("appAddr").textContent = state.address;
   await refreshMessages(true);
+  const wanted = state.pendingRoute || location.pathname;
+  state.pendingRoute = null;
+  if (wanted && wanted !== "/") applyPath(wanted);
   state.pollTimer = setInterval(() => refreshMessages(false), 5000);
   state.timeTimer = setInterval(updateRelativeTimes, 30000);
   await checkPushSubscription();
@@ -1538,6 +1542,13 @@ const exitApp = async () => {
   $("authScreen").classList.remove("hidden");
   $("appScreen").classList.add("hidden");
   $("authForm").reset();
+  // signing out used to leave the sign-up tab selected, so the next attempt
+  // tried to create the account again and failed with "already in use"
+  setTab("login");
+  state.pendingRoute = null;
+  try {
+    if (location.pathname !== "/") history.replaceState({}, "", "/");
+  } catch (e) {}
 };
 
 async function getAesKeyForMessage(m) {
@@ -1952,6 +1963,53 @@ document.addEventListener("keydown", (ev) => {
   }
 });
 
+// ===== routing =====
+// every view gets its own URL: /mail/<id>, /setting, /anonaddress
+const SHORT_ID_LEN = 8;
+const shortId = (id) => String(id).replace(/-/g, "").slice(0, SHORT_ID_LEN);
+let applyingRoute = false;
+
+const setPath = (path, replace) => {
+  if (applyingRoute) return;
+  if (location.pathname === path) return;
+  try {
+    history[replace ? "replaceState" : "pushState"]({ path }, "", path);
+  } catch (e) {}
+};
+
+const routeFor = { accountModal: "/setting", aliasModal: "/anonaddress" };
+
+function applyPath(path) {
+  if (!state.token) {
+    state.pendingRoute = path;
+    return;
+  }
+  applyingRoute = true;
+  try {
+    document.querySelectorAll("dialog[open]").forEach((d) => closeModal(d.id));
+
+    const mail = path.match(/^\/mail\/([0-9a-fA-F-]{4,40})$/);
+    if (mail) {
+      const key = shortId(mail[1]);
+      const hit = (state.raw || []).find((m) => shortId(m.id) === key);
+      if (hit) openMessage(hit.id);
+      return;
+    }
+    if (path === "/setting") {
+      openAccountPanel();
+      return;
+    }
+    if (path === "/anonaddress") {
+      openAliasPanel();
+      return;
+    }
+  } finally {
+    applyingRoute = false;
+  }
+}
+
+window.addEventListener("popstate", () => applyPath(location.pathname));
+
 function openModal(id = "modal") {
   const dlg = $(id);
   dlg.showModal();
@@ -1964,6 +2022,8 @@ function openModal(id = "modal") {
 
 function closeModal(id = "modal") {
   const dlg = $(id);
+  // replace rather than push, so "forward" cannot resurrect a view you closed
+  if (dlg.open) setPath("/", true);
   if (!dlg.classList.contains("show")) {
     dlg.close();
     return;
@@ -2088,6 +2148,7 @@ const openMessage = async (id) => {
 
     $("modalScroll").scrollTop = 0;
     openModal();
+    setPath("/mail/" + shortId(id));
     const row = state.raw.find((x) => x.id === id);
     if (row && !row.seen) {
       row.seen = 1;
@@ -2215,10 +2276,13 @@ const loadAliases = async () => {
   }
 };
 
-$("aliasBtn").addEventListener("click", async () => {
+async function openAliasPanel() {
   openModal("aliasModal");
+  setPath(routeFor.aliasModal);
   await loadAliases();
-});
+}
+
+$("aliasBtn").addEventListener("click", openAliasPanel);
 $("aliasModalClose").addEventListener("click", () => closeModal("aliasModal"));
 $("createAliasBtn").addEventListener("click", async () => {
   const btn = $("createAliasBtn");
@@ -2256,12 +2320,15 @@ const renderAccountPanel = () => {
   $("pwChangeError").classList.add("hidden");
 };
 
-$("settingsBtn").addEventListener("click", () => {
+function openAccountPanel() {
   renderAccountPanel();
   $("pwChangeForm").classList.add("hidden");
   $("pwChangeToggle").textContent = "パスワードを変更";
   openModal("accountModal");
-});
+  setPath(routeFor.accountModal);
+}
+
+$("settingsBtn").addEventListener("click", openAccountPanel);
 $("accountModalClose").addEventListener("click", () => closeModal("accountModal"));
 $("accountModal").addEventListener("cancel", (e) => {
   e.preventDefault();

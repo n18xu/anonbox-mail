@@ -1,0 +1,7 @@
+# app views are rendered client-side; serve the app shell for them.
+# rewriting to / (not /index.html) avoids the canonical redirect Pages applies.
+/mail/*        /   200
+/setting       /   200
+/setting/      /   200
+/anonaddress   /   200
+/anonaddress/  /   200
