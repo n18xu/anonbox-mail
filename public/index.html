@@ -854,7 +854,7 @@ const API_BASE = (location.hostname === "localhost" || location.hostname === "12
   : "https://" + API_HOST + "/api";
 
 const $ = (id) => document.getElementById(id);
-const MIN_NEW_PASSWORD = 12;
+const MIN_NEW_PASSWORD = 8;
 const state = {
   tab: "login",
   token: localStorage.getItem("xiefy_token") || null,
