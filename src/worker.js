@@ -5,6 +5,31 @@ const MAX_BODY_CHARS = 900000;
 const TRUNCATED_NOTE = "\n\n[このメールは大きすぎるため、以降は省略されました]";
 const TRUNCATED_NOTE_HTML = "<p>[このメールは大きすぎるため、以降は省略されました]</p>";
 
+// Inline images arrive as attachments referenced by cid:. Nothing else stores
+// them, so fold the small ones into the html as data: URIs before encrypting -
+// otherwise the reader only ever sees a placeholder.
+const MAX_INLINE_IMAGE = 200 * 1024;
+const MAX_INLINE_TOTAL = 600 * 1024;
+
+export function inlineCidImages(html, attachments) {
+  if (!html || !Array.isArray(attachments) || attachments.length === 0) return html;
+  let budget = MAX_INLINE_TOTAL;
+  let out = html;
+  for (const att of attachments) {
+    const rawCid = att?.contentId || "";
+    const cid = rawCid.replace(/^<|>$/g, "").trim();
+    const mime = att?.mimeType || "";
+    if (!cid || !mime.startsWith("image/")) continue;
+    const bytes = att.content instanceof ArrayBuffer ? new Uint8Array(att.content) : att.content;
+    if (!bytes || !bytes.length || bytes.length > MAX_INLINE_IMAGE || bytes.length > budget) continue;
+    const pattern = new RegExp("cid:" + cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    if (!pattern.test(out)) continue;
+    out = out.replace(pattern, `data:${mime};base64,${bytesToB64(bytes)}`);
+    budget -= bytes.length;
+  }
+  return out;
+}
+
 function limitBody(text, html) {
   let t = text || null;
   let h = html || null;
@@ -288,7 +313,11 @@ async function encryptMailForAccount(publicKeyB64, parsed, fromObj, toAddress) {
   );
 
   const bodyIv = crypto.getRandomValues(new Uint8Array(12));
-  const limited = limitBody(parsed.text, parsed.html);
+  let html = parsed.html;
+  const withInline = inlineCidImages(html, parsed.attachments);
+  // only keep the inlined version if it still fits comfortably in a row
+  if (withInline && withInline.length <= MAX_BODY_CHARS) html = withInline;
+  const limited = limitBody(parsed.text, html);
   if (limited.truncated) console.warn("mail body truncated to fit the row limit");
   const bodyPlain = JSON.stringify({
     text: limited.text,

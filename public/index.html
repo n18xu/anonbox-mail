@@ -1165,7 +1165,11 @@ function buildHtmlDoc(rawHtml, allowImages) {
     cleaned = DOMPurify.sanitize(dirty, {
       WHOLE_DOCUMENT: true,
       FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
-      FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "onsubmit", "srcset"],
+      // srcset only needs stripping while images are hidden; otherwise images
+      // that carry srcset without src would never render
+      FORBID_ATTR: allowImages
+        ? ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "onsubmit"]
+        : ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "onsubmit", "srcset"],
       ALLOW_DATA_ATTR: false,
       CUSTOM_ELEMENT_HANDLING: { tagNameCheck: null, attributeNameCheck: null, allowCustomizedBuiltInElements: false },
     });
@@ -1186,8 +1190,18 @@ function buildHtmlDoc(rawHtml, allowImages) {
   const cssUrlRe = /url\(\s*(['"]?)(?!data:)[^)'"]+\1\s*\)/gi;
   let remoteCount = 0;
 
+  let attachmentCount = 0;
   doc.querySelectorAll("img").forEach((img) => {
     const src = img.getAttribute("src") || "";
+    if (/^\s*cid:/i.test(src)) {
+      // inline attachment: nothing to render, so fall back to the placeholder box
+      img.removeAttribute("src");
+      img.removeAttribute("srcset");
+      img.setAttribute("alt", img.getAttribute("alt") || "[添付画像]");
+      img.setAttribute("title", "添付画像は保存されていません");
+      attachmentCount++;
+      return;
+    }
     if (!isRemoteRef(src)) return;
     remoteCount++;
     if (!allowImages) {
@@ -1243,12 +1257,12 @@ function buildHtmlDoc(rawHtml, allowImages) {
   // the sanitiser can miss a vector; this policy is what actually guarantees that
   // nothing is fetched from the network while images are hidden
   const csp = allowImages
-    ? "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; media-src https: http:; font-src data:"
+    ? "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; media-src https: http:; font-src data:; upgrade-insecure-requests"
     : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
   const fullHtml = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5"><base target="_blank"><meta name="color-scheme" content="light"><style>${baseCss}</style>${headHtml}</head><body>${bodyHtml}</body></html>`;
 
-  return { html: fullHtml, remoteCount };
+  return { html: fullHtml, remoteCount, attachmentCount };
 }
 
 function extractCode(...sources) {
