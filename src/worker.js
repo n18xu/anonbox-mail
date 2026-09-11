@@ -154,6 +154,22 @@ const isAuthVerifier = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
 const D1_MAX_IDS = 90;
 const MAX_BULK_IDS = 5000;
 
+// The support inbox. It is the only account allowed to write to everyone else.
+const ADMIN_INBOX = "admin";
+// Nobody may sign these up: admin is the support inbox, the one account allowed
+// to write into every mailbox, and the others are the addresses mail software
+// and abuse reports expect to reach the operator.
+const RESERVED_INBOXES = new Set([
+  ADMIN_INBOX, "support", "postmaster", "abuse", "security", "noreply",
+  "no-reply", "info", "root", "webmaster", "hostmaster",
+]);
+const ADMIN_NAME = "AnonBox";
+const BROADCAST_SUBJECT_MAX = 200;
+const BROADCAST_TEXT_MAX = 20000;
+// Each call handles a slice of the accounts so one request stays well inside the
+// Worker's time budget however many accounts exist; the client walks the cursor.
+const BROADCAST_CHUNK = 25;
+
 const chunk = (arr, size) => {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -759,6 +775,8 @@ export default {
         const parsed = parseAddress(body.address);
         if (!parsed) return err("invalid address (use name@" + DOMAIN + ", name=3-32 chars)");
         if (!isValidInbox(parsed.inbox)) return err("invalid inbox name");
+        // same answer as a name that is taken, so this cannot be used to probe
+        if (RESERVED_INBOXES.has(parsed.inbox)) return err("address already taken", 409);
         if (!isAuthVerifier(body.auth_verifier)) return err("invalid auth verifier");
         if (await visitorLimited("SIGNUP_LIMIT", env.SIGNUP_LIMIT, req, env)) return tooManyAttempts(VISITOR_RETRY_S);
         if (
@@ -858,6 +876,80 @@ export default {
       }
 
       const me = await getAuthAccount(req, env);
+
+      // Announcements from the support inbox. They are written straight into each
+      // account's mailbox, encrypted per account exactly like incoming mail, so
+      // nothing leaves the service and the bodies stay unreadable to the server.
+      if (path === "/api/broadcast" && req.method === "POST") {
+        if (!me) return err("unauthorized", 401);
+        if (me.inbox !== ADMIN_INBOX) return err("forbidden", 403);
+        const body = await req.json().catch(() => ({}));
+        const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (!subject || subject.length > BROADCAST_SUBJECT_MAX) return err("invalid subject");
+        if (!text || text.length > BROADCAST_TEXT_MAX) return err("invalid text");
+        const after = typeof body.after === "string" ? body.after : "";
+
+        const { results } = await env.DB.prepare(
+          `SELECT id, address, public_key FROM accounts WHERE id > ? ORDER BY id LIMIT ?`
+        )
+          .bind(after, BROADCAST_CHUNK)
+          .all();
+        const accounts = results || [];
+        if (accounts.length === 0) return json({ sent: 0, last_id: after, done: true });
+
+        const from = { address: ADMIN_INBOX + "@" + DOMAIN, name: ADMIN_NAME };
+        const parsed = { subject, text, html: null, attachments: [] };
+        const now = Date.now();
+        const statements = [];
+        const delivered = [];
+        for (const account of accounts) {
+          let encrypted;
+          try {
+            encrypted = await encryptMailForAccount(account.public_key, parsed, from, account.address);
+          } catch (e) {
+            // a broken public key must not stop the announcement reaching everyone else
+            console.error("broadcast: could not encrypt for an account", e?.message || String(e));
+            continue;
+          }
+          const msgId = crypto.randomUUID();
+          delivered.push({ id: account.id, msgId });
+          statements.push(
+            env.DB.prepare(
+              `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(
+              msgId,
+              account.id,
+              encrypted.encrypted_aes_key,
+              encrypted.meta_iv,
+              encrypted.meta_encrypted,
+              encrypted.body_iv,
+              encrypted.body_encrypted,
+              now
+            )
+          );
+        }
+        if (statements.length) await env.DB.batch(statements);
+
+        ctx.waitUntil(
+          Promise.all(
+            delivered.map((d) =>
+              pushToAccount(env, d.id, {
+                title: "新着メール",
+                body: "受信トレイをご確認ください",
+                messageId: d.msgId,
+              }).catch(() => {})
+            )
+          )
+        );
+
+        return json({
+          sent: statements.length,
+          last_id: accounts[accounts.length - 1].id,
+          done: accounts.length < BROADCAST_CHUNK,
+        });
+      }
 
       if (path === "/api/me") {
         if (!me) return err("unauthorized", 401);

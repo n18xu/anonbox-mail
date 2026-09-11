@@ -110,7 +110,7 @@
   button.danger { background: transparent; color: var(--danger); }
   button.danger:hover { background: var(--danger-soft); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  input {
+  input, textarea {
     width: 100%;
     padding: 0.7rem 0.85rem;
     border: 1px solid var(--border);
@@ -120,7 +120,8 @@
     background: var(--surface);
     color: var(--text);
   }
-  input:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  textarea { resize: vertical; line-height: 1.6; }
 
   .hidden { display: none !important; }
 
@@ -856,6 +857,23 @@
       <div class="helper" style="margin-bottom: 0.75rem;">変更すると暗号鍵が新しいパスワードで再暗号化され、他の端末のログインは無効になります。</div>
       <button type="submit" class="primary" id="pwChangeSubmit" style="width:100%;">パスワードを変更する</button>
     </form>
+
+    <div id="broadcastSection" class="hidden">
+      <hr class="section-sep">
+      <div class="danger-title">全アカウントへのお知らせ</div>
+      <div class="helper">登録中のすべてのアカウントの受信トレイに、admin@anonbox.email からのメールとして届きます。宛先は表示されず、受信者ごとに暗号化されます。</div>
+      <div id="broadcastError" class="auth-error hidden"></div>
+      <div class="field">
+        <label for="broadcastSubject">件名</label>
+        <input id="broadcastSubject" type="text" maxlength="200" placeholder="お知らせの件名">
+      </div>
+      <div class="field">
+        <label for="broadcastText">本文</label>
+        <textarea id="broadcastText" rows="6" maxlength="20000" placeholder="本文をご入力ください"></textarea>
+      </div>
+      <div class="helper" id="broadcastStatus"></div>
+      <button type="button" class="primary" id="broadcastBtn" style="width:100%;">全アカウントに送信する</button>
+    </div>
 
     <div class="danger-zone">
       <hr class="section-sep">
@@ -2348,6 +2366,57 @@ $("logoutBtn").addEventListener("click", async () => {
   try { await apiCall("/logout", { method: "POST" }); } catch (e) {}
   exitApp();
 });
+// Announcements: only the support inbox sees this, and the server checks again.
+const isAdminAccount = () => (state.address || "").split("@")[0] === "admin";
+
+const setBroadcastStatus = (msg) => {
+  $("broadcastStatus").textContent = msg || "";
+};
+
+$("broadcastBtn").addEventListener("click", async () => {
+  const errEl = $("broadcastError");
+  const fail = (msg) => {
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  };
+  errEl.classList.add("hidden");
+  const subject = $("broadcastSubject").value.trim();
+  const text = $("broadcastText").value.trim();
+  if (!subject) return fail("件名をご入力ください。");
+  if (!text) return fail("本文をご入力ください。");
+  if (!confirm("登録中のすべてのアカウントにこのお知らせを送信しますか？")) return;
+
+  const btn = $("broadcastBtn");
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "送信中…";
+  let after = "";
+  let sent = 0;
+  try {
+    // the server works through the accounts a slice at a time
+    for (let round = 0; round < 400; round++) {
+      const res = await apiCall("/broadcast", { method: "POST", body: { subject, text, after } });
+      sent += res.sent || 0;
+      after = res.last_id || after;
+      setBroadcastStatus(sent + "件に送信しました…");
+      if (res.done) break;
+    }
+    $("broadcastSubject").value = "";
+    $("broadcastText").value = "";
+    setBroadcastStatus(sent + "件のアカウントに送信しました。");
+    showToast(sent + "件に送信しました");
+    refreshMessages();
+  } catch (e) {
+    setBroadcastStatus("");
+    fail(sent > 0
+      ? sent + "件まで送信した時点で失敗しました: " + e.message
+      : "送信に失敗しました: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
 // Deleting lives only in settings: two confirmations first, and only then the
 // account password, checked here by opening the private key and again by the server.
 const resetDeleteStep = () => {
@@ -2550,6 +2619,9 @@ function openAccountPanel() {
   $("pwChangeForm").classList.add("hidden");
   $("pwChangeToggle").textContent = "パスワードを変更";
   resetDeleteStep();
+  $("broadcastSection").classList.toggle("hidden", !isAdminAccount());
+  $("broadcastError").classList.add("hidden");
+  setBroadcastStatus("");
   openModal("accountModal");
   setPath(routeFor.accountModal);
 }
