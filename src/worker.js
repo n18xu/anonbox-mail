@@ -1,4 +1,5 @@
 import PostalMime from "postal-mime";
+import { DurableObject } from "cloudflare:workers";
 
 // D1 caps a row at ~2 MB and base64 inflates by 4/3, so cap the plaintext first
 const MAX_BODY_CHARS = 900000;
@@ -176,11 +177,96 @@ async function sha256Hex(text) {
   return bytesToHex(new Uint8Array(digest));
 }
 
-// true when this visitor has gone over the limiter's budget for the current minute
-async function visitorLimited(limiter, req) {
-  if (!limiter) return false;
-  const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+// Budgets for the memory counter below; they match the wrangler.toml bindings.
+const VISITOR_BUDGETS = {
+  SIGNUP_LIMIT: { limit: 10, windowMs: 60000 },
+  LOGIN_LIMIT: { limit: 20, windowMs: 60000 },
+};
+
+// Cloudflare's own rate limiter counts per location and is eventually consistent,
+// so a burst can slip past it. These counters live only in this isolate's memory,
+// keyed by a hash of the visitor: nothing is written anywhere and they disappear
+// when the isolate is recycled.
+const visitorCounts = new Map();
+const MAX_TRACKED_VISITORS = 10000;
+
+function dropStaleVisitors(now) {
+  for (const [slot, entry] of visitorCounts) {
+    if (entry.resetAt <= now) visitorCounts.delete(slot);
+  }
+  // Still full of live counters: drop the oldest half (Map keeps insertion order).
+  if (visitorCounts.size >= MAX_TRACKED_VISITORS) {
+    let drop = visitorCounts.size - Math.floor(MAX_TRACKED_VISITORS / 2);
+    for (const slot of visitorCounts.keys()) {
+      if (drop-- <= 0) break;
+      visitorCounts.delete(slot);
+    }
+  }
+}
+
+function memoryLimited(name, key, now) {
+  const budget = VISITOR_BUDGETS[name];
+  if (!budget) return false;
+  const slot = name + ":" + key;
+  const entry = visitorCounts.get(slot);
+  if (!entry || entry.resetAt <= now) {
+    if (visitorCounts.size >= MAX_TRACKED_VISITORS) dropStaleVisitors(now);
+    visitorCounts.set(slot, { count: 1, resetAt: now + budget.windowMs });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > budget.limit;
+}
+
+// One instance per limit and visitor. Cloudflare spreads a visitor's requests
+// across machines, so no counter kept inside a Worker isolate sees all of them;
+// this object is the single place each visitor's requests are counted. It holds
+// nothing but a count and the end of the current window, and erases itself as
+// soon as that window is over.
+export class VisitorLimiter extends DurableObject {
+  // true when this visitor has used up the budget for the current window
+  async limit(budget, windowMs) {
+    const now = Date.now();
+    const state = await this.ctx.storage.get("window");
+    if (!state || state.resetAt <= now) {
+      const resetAt = now + windowMs;
+      await this.ctx.storage.put("window", { count: 1, resetAt });
+      await this.ctx.storage.setAlarm(resetAt + 1000);
+      return false;
+    }
+    state.count += 1;
+    await this.ctx.storage.put("window", state);
+    return state.count > budget;
+  }
+
+  // The window has passed: forget this visitor.
+  async alarm() {
+    const state = await this.ctx.storage.get("window");
+    if (state && state.resetAt > Date.now()) {
+      await this.ctx.storage.setAlarm(state.resetAt + 1000);
+      return;
+    }
+    await this.ctx.storage.deleteAll();
+  }
+}
+
+// true when this visitor has gone over the budget for the current minute
+async function visitorLimited(name, limiter, req, env) {
+  const budget = VISITOR_BUDGETS[name];
+  if (!budget) return false;
+  const ip = req.headers.get("CF-Connecting-IP");
+  // No visitor IP means we are not behind Cloudflare: local development, where our
+  // own test runs would otherwise lock us out.
+  if (!ip || ip === "127.0.0.1" || ip === "::1") return false;
   const key = (await sha256Hex("anonbox.ratelimit:" + ip)).slice(0, 32);
+  // Free check first: a burst that lands on this isolate never leaves it.
+  if (memoryLimited(name, key, Date.now())) return true;
+  const counter = env?.VISITOR_LIMITER;
+  if (counter) {
+    const stub = counter.get(counter.idFromName(name + ":" + key));
+    if (await stub.limit(budget.limit, budget.windowMs)) return true;
+  }
+  if (!limiter) return false;
   const { success } = await limiter.limit({ key });
   return !success;
 }
@@ -674,7 +760,7 @@ export default {
         if (!parsed) return err("invalid address (use name@" + DOMAIN + ", name=3-32 chars)");
         if (!isValidInbox(parsed.inbox)) return err("invalid inbox name");
         if (!isAuthVerifier(body.auth_verifier)) return err("invalid auth verifier");
-        if (await visitorLimited(env.SIGNUP_LIMIT, req)) return tooManyAttempts(VISITOR_RETRY_S);
+        if (await visitorLimited("SIGNUP_LIMIT", env.SIGNUP_LIMIT, req, env)) return tooManyAttempts(VISITOR_RETRY_S);
         if (
           typeof body.public_key !== "string" ||
           typeof body.encrypted_private_key !== "string" ||
@@ -720,7 +806,7 @@ export default {
         const parsed = parseAddress(body.address);
         if (!parsed) return err("invalid credentials", 401);
 
-        if (await visitorLimited(env.LOGIN_LIMIT, req)) return tooManyAttempts(VISITOR_RETRY_S);
+        if (await visitorLimited("LOGIN_LIMIT", env.LOGIN_LIMIT, req, env)) return tooManyAttempts(VISITOR_RETRY_S);
         const keys = [await loginThrottleKey(parsed.inbox)];
         const wait = await throttleCheck(env, keys);
         if (wait) return tooManyAttempts(wait);

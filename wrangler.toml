@@ -38,3 +38,13 @@ simple = { limit = 20, period = 60 }
 # No persisted request logs: they would carry visitor IPs and headers
 [observability]
 enabled = false
+
+# Exact per-visitor counting for signup and login. The object keeps only a count
+# and the end of the current minute, then deletes itself; no IP is written.
+[[durable_objects.bindings]]
+name = "VISITOR_LIMITER"
+class_name = "VisitorLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VisitorLimiter"]
