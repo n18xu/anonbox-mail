@@ -29,7 +29,11 @@ CREATE TABLE messages (
   body_iv TEXT NOT NULL,
   body_encrypted TEXT NOT NULL,
   received_at INTEGER NOT NULL,
-  seen INTEGER NOT NULL DEFAULT 0
+  seen INTEGER NOT NULL DEFAULT 0,
+  -- 1 only for mail this service wrote itself, from the support desk. Mail that
+  -- arrives from outside is always 0, whatever its From header claims, so a
+  -- forged admin@ address cannot earn the verified mark.
+  official INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_messages_account ON messages(account_id, received_at DESC);
 CREATE INDEX idx_messages_received ON messages(received_at);

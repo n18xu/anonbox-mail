@@ -159,10 +159,10 @@ const ADMIN_INBOX = "admin";
 // Nobody may sign these up: admin is the support inbox, the one account allowed
 // to write into every mailbox, and the others are the addresses mail software
 // and abuse reports expect to reach the operator.
-// Holding the admin inbox is not enough to write to every mailbox: the operator
-// has to name the exact account in BROADCAST_ACCOUNT_ID. With the var unset -
-// the default - nobody can broadcast.
-const canBroadcast = (env, me) => {
+// Holding the admin inbox is not enough to write to every mailbox or to send as
+// the support desk: the operator has to name the exact account in
+// BROADCAST_ACCOUNT_ID. With the var unset - the default - nobody can.
+const isSupportAccount = (env, me) => {
   const allowed = String(env.BROADCAST_ACCOUNT_ID || "").trim();
   return Boolean(allowed) && me.inbox === ADMIN_INBOX && me.account_id === allowed;
 };
@@ -177,6 +177,9 @@ const BROADCAST_TEXT_MAX = 20000;
 // Each call handles a slice of the accounts so one request stays well inside the
 // Worker's time budget however many accounts exist; the client walks the cursor.
 const BROADCAST_CHUNK = 25;
+// Deliberately loose: the real check is whatever the receiving server accepts.
+const isEmailAddress = (s) =>
+  typeof s === "string" && s.length <= 254 && /^[^\s@,;:<>"]+@[^\s@,;:<>"]+\.[^\s@,;:<>"]+$/.test(s);
 
 const chunk = (arr, size) => {
   const out = [];
@@ -648,25 +651,28 @@ async function pushToAccount(env, accountId, payload) {
 
 // Receiving a mail is the same work whether it arrived on this account's
 // Email Routing or was forwarded in from the old domain's worker.
+// An address on this domain is either an account's own inbox or one of the
+// anonymous aliases pointing at it.
+async function findAccountForAddress(env, inbox) {
+  const account = await env.DB.prepare(`SELECT id, public_key FROM accounts WHERE inbox = ?`)
+    .bind(inbox)
+    .first();
+  if (account) return account;
+  return await env.DB.prepare(
+    `SELECT acc.id as id, acc.public_key as public_key
+     FROM aliases al JOIN accounts acc ON acc.id = al.account_id
+     WHERE al.address = ?`
+  )
+    .bind(inbox)
+    .first();
+}
+
 async function storeIncomingMail(env, ctx, recipient, rawBuf) {
   const parts = String(recipient || "").toLowerCase().split("@");
   if (parts.length !== 2) return { ok: false, status: 400, reason: "bad recipient" };
   const inbox = parts[0];
 
-  let account = await env.DB.prepare(`SELECT id, public_key FROM accounts WHERE inbox = ?`)
-    .bind(inbox)
-    .first();
-
-  if (!account) {
-    account = await env.DB.prepare(
-      `SELECT acc.id as id, acc.public_key as public_key
-       FROM aliases al JOIN accounts acc ON acc.id = al.account_id
-       WHERE al.address = ?`
-    )
-      .bind(inbox)
-      .first();
-  }
-
+  const account = await findAccountForAddress(env, inbox);
   if (!account) return { ok: false, status: 404, reason: "address not in use" };
 
   const parsed = await PostalMime.parse(rawBuf);
@@ -885,12 +891,107 @@ export default {
 
       const me = await getAuthAccount(req, env);
 
+      // One reply from the support desk. An anonbox address is written straight
+      // into that mailbox, encrypted for it like any incoming mail; anything else
+      // leaves through Cloudflare Email Sending, which the domain has to be
+      // onboarded onto first.
+      if (path === "/api/send" && req.method === "POST") {
+        if (!me) return err("unauthorized", 401);
+        if (!isSupportAccount(env, me)) return err("forbidden", 403);
+        const body = await req.json().catch(() => ({}));
+        const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
+        const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        const inReplyTo = typeof body.in_reply_to === "string" ? body.in_reply_to.trim() : "";
+        if (!isEmailAddress(to)) return err("invalid recipient");
+        if (!subject || subject.length > BROADCAST_SUBJECT_MAX) return err("invalid subject");
+        if (!text || text.length > BROADCAST_TEXT_MAX) return err("invalid text");
+
+        const from = { address: ADMIN_INBOX + "@" + DOMAIN, name: ADMIN_NAME };
+        const parsed = { subject, text, html: null, attachments: [] };
+        const recipientDomain = to.split("@")[1];
+        let route = "external";
+
+        if (ALL_DOMAINS.includes(recipientDomain)) {
+          route = "internal";
+          const target = await findAccountForAddress(env, to.split("@")[0]);
+          if (!target) return err("no such address", 404);
+          const encrypted = await encryptMailForAccount(target.public_key, parsed, from, to);
+          const msgId = crypto.randomUUID();
+          await env.DB.prepare(
+            `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, official)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
+          )
+            .bind(
+              msgId,
+              target.id,
+              encrypted.encrypted_aes_key,
+              encrypted.meta_iv,
+              encrypted.meta_encrypted,
+              encrypted.body_iv,
+              encrypted.body_encrypted,
+              Date.now()
+            )
+            .run();
+          ctx.waitUntil(
+            pushToAccount(env, target.id, {
+              title: "新着メール",
+              body: "受信トレイをご確認ください",
+              messageId: msgId,
+            }).catch(() => {})
+          );
+        } else {
+          if (!env.EMAIL) {
+            return err("sending to addresses outside " + DOMAIN + " is not switched on yet", 503);
+          }
+          try {
+            await env.EMAIL.send({
+              to,
+              from: { email: from.address, name: from.name },
+              replyTo: from.address,
+              subject,
+              text,
+              ...(inReplyTo ? { headers: { "In-Reply-To": inReplyTo } } : {}),
+            });
+          } catch (e) {
+            console.error("send failed", e?.code || "", e?.message || String(e));
+            return err("could not send: " + (e?.code || e?.message || "unknown error"), 502);
+          }
+        }
+
+        // keep the support desk's own copy of what it sent
+        const copy = await env.DB.prepare(`SELECT public_key FROM accounts WHERE id = ?`)
+          .bind(me.account_id)
+          .first();
+        if (copy?.public_key) {
+          const sentParsed = { subject: "[送信済] " + subject, text, html: null, attachments: [] };
+          const mine = await encryptMailForAccount(copy.public_key, sentParsed, from, to);
+          await env.DB.prepare(
+            `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, official)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
+          )
+            .bind(
+              crypto.randomUUID(),
+              me.account_id,
+              mine.encrypted_aes_key,
+              mine.meta_iv,
+              mine.meta_encrypted,
+              mine.body_iv,
+              mine.body_encrypted,
+              Date.now()
+            )
+            .run();
+        }
+
+        return json({ ok: true, to, route });
+      }
+
       // Announcements from the support inbox. They are written straight into each
       // account's mailbox, encrypted per account exactly like incoming mail, so
       // nothing leaves the service and the bodies stay unreadable to the server.
       if (path === "/api/broadcast" && req.method === "POST") {
         if (!me) return err("unauthorized", 401);
-        if (!canBroadcast(env, me)) return err("forbidden", 403);
+        if (!isSupportAccount(env, me)) return err("forbidden", 403);
         const body = await req.json().catch(() => ({}));
         const subject = typeof body.subject === "string" ? body.subject.trim() : "";
         const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -924,8 +1025,8 @@ export default {
           delivered.push({ id: account.id, msgId });
           statements.push(
             env.DB.prepare(
-              `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, official)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
             ).bind(
               msgId,
               account.id,
@@ -971,7 +1072,8 @@ export default {
             id: me.account_id,
             address: me.address,
             created_at: me.created_at,
-            can_broadcast: canBroadcast(env, me),
+            can_broadcast: isSupportAccount(env, me),
+            can_send: isSupportAccount(env, me),
             encrypted_private_key: acc?.encrypted_private_key,
             pk_iv: acc?.pk_iv,
             kdf_salt: acc?.kdf_salt,
@@ -1130,12 +1232,12 @@ export default {
         const paged = Number.isFinite(before);
         const stmt = paged
           ? env.DB.prepare(
-              `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, received_at, seen
+              `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, received_at, seen, official
                FROM messages WHERE account_id = ? AND received_at < ?
                ORDER BY received_at DESC LIMIT ?`
             ).bind(me.account_id, before, limit)
           : env.DB.prepare(
-              `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, received_at, seen
+              `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, received_at, seen, official
                FROM messages WHERE account_id = ?
                ORDER BY received_at DESC LIMIT ?`
             ).bind(me.account_id, limit);
@@ -1210,7 +1312,7 @@ export default {
 
         if (req.method === "GET") {
           const row = await env.DB.prepare(
-            `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, seen
+            `SELECT id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, seen, official
              FROM messages WHERE id = ? AND account_id = ?`
           )
             .bind(id, me.account_id)
