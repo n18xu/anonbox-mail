@@ -1364,7 +1364,10 @@ const showAuthError = (msg) => {
 };
 
 document.querySelectorAll(".tab").forEach(el => {
-  el.addEventListener("click", () => setTab(el.dataset.tab));
+  el.addEventListener("click", () => {
+    state.tabChosen = true;
+    setTab(el.dataset.tab);
+  });
 });
 
 $("pwToggle").addEventListener("click", () => {
@@ -2720,7 +2723,7 @@ $("pwChangeForm").addEventListener("submit", async (e) => {
       state.privateKey = null;
     }
   }
-  setTab("login");
+  if (!state.tabChosen) setTab("login");
 })();
 </script>
 </body>
