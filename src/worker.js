@@ -791,6 +791,27 @@ export default {
           });
         }
         if (req.method === "DELETE") {
+          // a session alone is not enough: deleting needs the password, checked the
+          // same way (and throttled the same way) as a login
+          const body = await req.json().catch(() => ({}));
+          if (!isAuthVerifier(body.auth_verifier)) return err("password required", 400);
+          const acc = await env.DB.prepare(
+            `SELECT inbox, password_hash, password_salt, auth_version FROM accounts WHERE id = ?`
+          )
+            .bind(me.account_id)
+            .first();
+          if (!acc) return err("unauthorized", 401);
+          if ((acc.auth_version || 1) !== AUTH_VERSION) {
+            return err("please sign in again before deleting your account", 409);
+          }
+          const keys = [await loginThrottleKey(acc.inbox)];
+          const wait = await throttleCheck(env, keys);
+          if (wait) return tooManyAttempts(wait);
+          if (!(await verifyPassword(body.auth_verifier, acc.password_hash, acc.password_salt))) {
+            await throttleFail(env, keys);
+            return err("password is incorrect", 403);
+          }
+          await throttleReset(env, keys);
           await env.DB.batch([
             env.DB.prepare(`DELETE FROM push_subscriptions WHERE account_id = ?`).bind(me.account_id),
             env.DB.prepare(`DELETE FROM aliases WHERE account_id = ?`).bind(me.account_id),

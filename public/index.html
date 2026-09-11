@@ -861,6 +861,11 @@
       <hr class="section-sep">
       <div class="danger-title">アカウントの削除</div>
       <div class="helper">アカウント、届いたメール、匿名アドレスがすべて消えます。元に戻すことはできません。</div>
+      <div id="deleteAccError" class="auth-error hidden"></div>
+      <div class="field">
+        <label for="deletePwInput">パスワード</label>
+        <input id="deletePwInput" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" placeholder="削除するにはパスワードを入力">
+      </div>
       <button type="button" class="danger" id="deleteAccBtn">アカウントを削除する</button>
     </div>
   </div>
@@ -2340,26 +2345,54 @@ $("logoutBtn").addEventListener("click", async () => {
   try { await apiCall("/logout", { method: "POST" }); } catch (e) {}
   exitApp();
 });
-// Deleting lives only in settings and asks three times, the last by typing the
-// name, so a stray tap can never wipe an inbox.
+// Deleting lives only in settings. It needs the account password, checked here by
+// opening the private key and again by the server, and then two confirmations.
 $("deleteAccBtn").addEventListener("click", async () => {
-  const inbox = String(state.address || "").split("@")[0];
-  if (!inbox) return;
-  if (!confirm("【確認 1/3】アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
-  if (!confirm("【確認 2/3】本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
-  const typed = prompt(`【確認 3/3】削除するには、アドレスの @ より前（${inbox}）を入力してください。`);
-  if (typed === null) return;
-  if (typed.trim().toLowerCase() !== inbox.toLowerCase()) {
-    showToast("入力が一致しないため、削除を中止しました");
-    return;
-  }
+  const errEl = $("deleteAccError");
+  const fail = (msg) => {
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  };
+  errEl.classList.add("hidden");
+  const password = $("deletePwInput").value;
+  if (!password) return fail("パスワードを入力してください。");
+
+  const btn = $("deleteAccBtn");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "確認中…";
+  let auth;
   try {
-    await apiCall("/me", { method: "DELETE" });
+    const acc = await apiCall("/me");
+    auth = await deriveAuthMaterial(password, state.address);
+    await unwrapPrivateKeyWith(auth.wrapKey, acc.encrypted_private_key, acc.pk_iv);
+  } catch (e) {
+    return fail(e.status ? "確認できませんでした: " + e.message : "パスワードが正しくありません。");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+
+  if (!confirm("【確認 1/2】アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
+  if (!confirm("【確認 2/2】本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
+  try {
+    await apiCall("/me", { method: "DELETE", body: { auth_verifier: auth.verifier } });
+    $("deletePwInput").value = "";
     closeModal("accountModal");
     showToast("アカウントを削除しました");
     exitApp();
   } catch (err) {
-    showToast("削除に失敗しました: " + err.message);
+    if (err.status === 403) fail("パスワードが正しくありません。");
+    else if (err.status === 429) fail("試行回数が多すぎます。しばらく時間をおいてからお試しください。");
+    else if (err.status === 409) fail("一度ログインし直してから削除してください。");
+    else fail("削除に失敗しました: " + err.message);
+  }
+});
+
+$("deletePwInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    $("deleteAccBtn").click();
   }
 });
 $("modalClose").addEventListener("click", () => closeModal());
@@ -2497,6 +2530,8 @@ function openAccountPanel() {
   renderAccountPanel();
   $("pwChangeForm").classList.add("hidden");
   $("pwChangeToggle").textContent = "パスワードを変更";
+  $("deletePwInput").value = "";
+  $("deleteAccError").classList.add("hidden");
   openModal("accountModal");
   setPath(routeFor.accountModal);
 }
