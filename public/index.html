@@ -1855,7 +1855,9 @@ const paintMessages = () => {
       m.addEventListener(evt, cancel)
     );
   });
-  el.querySelectorAll(".msg .avatar, .msg .check").forEach((slot) => {
+  // the avatar is not a selection handle: tapping it opens the mail like the rest of
+  // the row. The check circle only exists while selecting.
+  el.querySelectorAll(".msg .check").forEach((slot) => {
     slot.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const item = slot.closest(".msg");
@@ -1865,7 +1867,6 @@ const paintMessages = () => {
         return;
       }
       if (state.selectMode) toggleSelect(item.dataset.id);
-      else enterSelectMode(item.dataset.id);
     });
   });
   el.querySelectorAll(".code-chip").forEach(chip => {
