@@ -147,6 +147,23 @@ const isValidPassword = (s) => typeof s === "string" && s.length >= 8 && s.lengt
 // v2 clients send PBKDF2/HKDF output, never the password itself
 const isAuthVerifier = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
 
+// D1 allows at most 100 bound parameters per statement. Bulk operations bind the
+// account id (and sometimes a flag) plus the message ids, so stay well under it.
+// Binding 100 ids made every 100+ selection fail with a 500.
+const D1_MAX_IDS = 90;
+const MAX_BULK_IDS = 5000;
+
+const chunk = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+const messageIds = (ids) =>
+  (Array.isArray(ids) ? ids : [])
+    .filter((v) => typeof v === "string" && /^[a-f0-9-]{1,64}$/i.test(v))
+    .slice(0, MAX_BULK_IDS);
+
 // ===== login throttling =====
 
 const clientIp = (req) => req.headers.get("CF-Connecting-IP") || "unknown";
@@ -899,24 +916,67 @@ export default {
                ORDER BY received_at DESC LIMIT ?`
             ).bind(me.account_id, limit);
         const { results } = await stmt.all();
-        return json({ messages: results, has_more: results.length === limit });
+        let total = null;
+        let unread = null;
+        if (!paged) {
+          const counts = await env.DB.prepare(
+            `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN seen = 0 THEN 1 ELSE 0 END), 0) AS unread
+             FROM messages WHERE account_id = ?`
+          )
+            .bind(me.account_id)
+            .first();
+          total = counts?.total ?? 0;
+          unread = counts?.unread ?? 0;
+        }
+        return json({ messages: results, has_more: results.length === limit, total, unread });
       }
 
       if (path === "/api/messages/delete" && req.method === "POST") {
         if (!me) return err("unauthorized", 401);
         const body = await req.json().catch(() => ({}));
-        const ids = Array.isArray(body.ids) ? body.ids : [];
-        const valid = ids
-          .filter((v) => typeof v === "string" && /^[a-f0-9-]{1,64}$/i.test(v))
-          .slice(0, 200);
+        if (body.all === true) {
+          const res = await env.DB.prepare(`DELETE FROM messages WHERE account_id = ?`)
+            .bind(me.account_id)
+            .run();
+          return json({ ok: true, deleted: res?.meta?.changes ?? 0 });
+        }
+        const valid = messageIds(body.ids);
         if (valid.length === 0) return err("no valid message ids");
-        const placeholders = valid.map(() => "?").join(",");
-        const res = await env.DB.prepare(
-          `DELETE FROM messages WHERE account_id = ? AND id IN (${placeholders})`
-        )
-          .bind(me.account_id, ...valid)
-          .run();
-        return json({ ok: true, deleted: res?.meta?.changes ?? valid.length });
+        const results = await env.DB.batch(
+          chunk(valid, D1_MAX_IDS).map((group) =>
+            env.DB.prepare(
+              `DELETE FROM messages WHERE account_id = ? AND id IN (${group.map(() => "?").join(",")})`
+            ).bind(me.account_id, ...group)
+          )
+        );
+        const deleted = results.reduce((n, r) => n + (r?.meta?.changes || 0), 0);
+        return json({ ok: true, deleted });
+      }
+
+      // mark messages read (seen: 1, the default) or unread (seen: 0)
+      if (path === "/api/messages/read" && req.method === "POST") {
+        if (!me) return err("unauthorized", 401);
+        const body = await req.json().catch(() => ({}));
+        const seen = body.seen === 0 ? 0 : 1;
+        if (body.all === true) {
+          const res = await env.DB.prepare(
+            `UPDATE messages SET seen = ? WHERE account_id = ? AND seen != ?`
+          )
+            .bind(seen, me.account_id, seen)
+            .run();
+          return json({ ok: true, updated: res?.meta?.changes ?? 0 });
+        }
+        const valid = messageIds(body.ids);
+        if (valid.length === 0) return err("no valid message ids");
+        const results = await env.DB.batch(
+          chunk(valid, D1_MAX_IDS).map((group) =>
+            env.DB.prepare(
+              `UPDATE messages SET seen = ? WHERE account_id = ? AND id IN (${group.map(() => "?").join(",")})`
+            ).bind(seen, me.account_id, ...group)
+          )
+        );
+        const updated = results.reduce((n, r) => n + (r?.meta?.changes || 0), 0);
+        return json({ ok: true, updated });
       }
 
       const msgMatch = path.match(/^\/api\/messages\/([a-f0-9-]+)$/i);

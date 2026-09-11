@@ -1,5 +1,8 @@
+# Mail bodies render in a srcdoc iframe, which inherits this policy, so img-src has to
+# allow remote images or every external image in a mail is blocked. When images are
+# hidden, the iframe's own stricter policy still blocks them.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.anonbox.email https://api.xiefy.site; frame-src 'self'; frame-ancestors 'none'; form-action 'none'; object-src 'none'; base-uri 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; media-src 'self' data: https: http:; connect-src 'self' https://api.anonbox.email https://api.xiefy.site; frame-src 'self'; frame-ancestors 'none'; form-action 'none'; object-src 'none'; base-uri 'none'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer

@@ -267,6 +267,24 @@
   .select-bar .spacer { flex: 1; }
   .select-bar button { padding: 0.4rem 0.75rem; font-size: 0.8125rem; }
   .select-bar button.ghost:hover { background: rgba(60, 64, 67, 0.1); }
+  .select-bar button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .select-everything {
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    gap: 0.2rem 0.5rem; padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem; text-align: center;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .link-btn {
+    background: transparent; color: var(--accent);
+    padding: 0.15rem 0.35rem; font-size: 0.8125rem; font-weight: 500;
+  }
+  .link-btn:hover { background: var(--accent-soft); }
+  @media (max-width: 420px) {
+    .select-bar { flex-wrap: wrap; row-gap: 0.15rem; }
+    .select-bar .count { order: -1; flex: 1 1 100%; padding: 0.1rem 0.4rem 0; }
+    .select-bar .spacer { display: none; }
+    .select-bar button { padding: 0.4rem 0.55rem; }
+  }
 
   .messages { display: block; border-top: 1px solid var(--divider); }
   .msg {
@@ -650,7 +668,12 @@
       <div class="count" id="selectCount">0件を選択</div>
       <div class="spacer"></div>
       <button class="ghost" id="selectAllBtn">すべて選択</button>
+      <button class="ghost" id="bulkReadBtn" disabled>既読</button>
       <button class="danger" id="bulkDeleteBtn" disabled>削除</button>
+    </div>
+    <div class="select-everything hidden" id="selectEverything">
+      <span id="selectEverythingText"></span>
+      <button class="link-btn" id="selectEverythingBtn" type="button"></button>
     </div>
     <div class="messages" id="messages"></div>
     <div class="load-more-wrap hidden" id="loadMoreWrap">
@@ -876,6 +899,9 @@ const state = {
   raw: [],
   metaCache: new Map(),
   hasMore: false,
+  serverTotal: 0,
+  serverUnread: 0,
+  selectEverything: false,
   query: "",
   unreadOnly: false,
   selectMode: false,
@@ -1546,6 +1572,9 @@ const exitApp = async () => {
   state.raw = [];
   state.metaCache.clear();
   state.hasMore = false;
+  state.serverTotal = 0;
+  state.serverUnread = 0;
+  state.selectEverything = false;
   state.query = "";
   state.unreadOnly = false;
   $("searchInput").value = "";
@@ -1632,6 +1661,10 @@ const refreshMessages = async (full = false) => {
   try {
     const data = await apiCall("/messages?limit=" + (full ? MESSAGE_PAGE_SIZE : POLL_SIZE));
     mergeMessages(data.messages || [], full);
+    if (typeof data.total === "number") {
+      state.serverTotal = data.total;
+      state.serverUnread = data.unread || 0;
+    }
     if (full) state.hasMore = !!data.has_more;
     const sig = state.raw.map(m => `${m.id}:${m.seen}`).join(",") + "|" + state.hasMore;
     if (sig !== state.lastMsgSig) {
@@ -1673,9 +1706,10 @@ const visibleMessages = () => (state.decoded || []).filter(matchesFilter);
 const setIdleStatus = () => {
   const st = $("status");
   st.classList.remove("offline");
+  const total = state.serverTotal || state.raw.length;
   st.textContent = filterActive()
     ? `${visibleMessages().length}件を表示`
-    : (state.raw.length ? `${state.raw.length}件` : "新着を確認しています");
+    : (total ? `${total}件${state.serverUnread ? "・未読" + state.serverUnread : ""}` : "新着を確認しています");
 };
 
 const clearSearch = () => {
@@ -1872,21 +1906,49 @@ const applySelectionUI = () => {
   const el = $("messages");
   el.classList.toggle("select-mode", state.selectMode);
   el.querySelectorAll(".msg").forEach((m) => {
-    m.classList.toggle("selected", state.selectMode && state.selected.has(m.dataset.id));
+    m.classList.toggle(
+      "selected",
+      state.selectMode && (state.selectEverything || state.selected.has(m.dataset.id))
+    );
   });
   $("inboxHead").classList.toggle("hidden", state.selectMode);
   $("selectBar").classList.toggle("hidden", !state.selectMode);
-  const total = el.querySelectorAll(".msg").length;
-  $("selectCount").textContent = state.selected.size + "件を選択";
-  $("bulkDeleteBtn").disabled = state.selected.size === 0;
+
+  const visible = el.querySelectorAll(".msg").length;
+  const count = state.selectEverything ? state.serverTotal : state.selected.size;
+  $("selectCount").textContent = count + "件を選択";
+  $("bulkDeleteBtn").disabled = count === 0;
+  $("bulkReadBtn").disabled = count === 0;
+  // short labels on narrow screens keep all four buttons on one row
+  const narrow = window.matchMedia("(max-width: 420px)").matches;
   $("bulkDeleteBtn").textContent =
-    state.selected.size > 0 ? `削除（${state.selected.size}）` : "削除";
-  $("selectAllBtn").textContent =
-    total > 0 && state.selected.size === total ? "選択を解除" : "すべて選択";
+    count > 0 ? (narrow ? `削除(${count})` : `削除（${count}）`) : "削除";
+  const allOn = visible > 0 && (state.selectEverything || state.selected.size === visible);
+  $("selectAllBtn").textContent = allOn
+    ? (narrow ? "解除" : "選択を解除")
+    : (narrow ? "全選択" : "すべて選択");
+
+  // once every loaded row is selected, offer the rest of the inbox (like Gmail)
+  const banner = $("selectEverything");
+  const everyVisibleSelected = visible > 0 && state.selected.size === visible;
+  if (state.selectMode && state.selectEverything) {
+    $("selectEverythingText").textContent = `受信トレイの${state.serverTotal}件すべてを選択中です。`;
+    $("selectEverythingBtn").textContent = "選択を解除";
+    banner.classList.remove("hidden");
+  } else if (
+    state.selectMode && everyVisibleSelected && !filterActive() && state.serverTotal > visible
+  ) {
+    $("selectEverythingText").textContent = `表示中の${visible}件を選択中です。`;
+    $("selectEverythingBtn").textContent = `受信トレイの${state.serverTotal}件すべてを選択`;
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
 };
 
 const enterSelectMode = (id) => {
   state.selectMode = true;
+  state.selectEverything = false;
   state.selected.clear();
   if (id) state.selected.add(id);
   applySelectionUI();
@@ -1894,11 +1956,17 @@ const enterSelectMode = (id) => {
 
 const exitSelectMode = () => {
   state.selectMode = false;
+  state.selectEverything = false;
   state.selected.clear();
   applySelectionUI();
 };
 
 const toggleSelect = (id) => {
+  if (state.selectEverything) {
+    // narrowing a whole-inbox selection falls back to the rows on screen
+    state.selectEverything = false;
+    $("messages").querySelectorAll(".msg").forEach((m) => state.selected.add(m.dataset.id));
+  }
   if (state.selected.has(id)) state.selected.delete(id);
   else state.selected.add(id);
   applySelectionUI();
@@ -1947,28 +2015,99 @@ $("selectModeBtn").addEventListener("click", () => enterSelectMode(null));
 $("selectCancelBtn").addEventListener("click", exitSelectMode);
 $("selectAllBtn").addEventListener("click", () => {
   const ids = [...$("messages").querySelectorAll(".msg")].map((m) => m.dataset.id);
-  if (state.selected.size === ids.length) state.selected.clear();
-  else ids.forEach((id) => state.selected.add(id));
+  if (state.selectEverything || (ids.length > 0 && state.selected.size === ids.length)) {
+    state.selectEverything = false;
+    state.selected.clear();
+  } else {
+    ids.forEach((id) => state.selected.add(id));
+  }
   applySelectionUI();
 });
-$("bulkDeleteBtn").addEventListener("click", async () => {
+
+$("selectEverythingBtn").addEventListener("click", () => {
+  if (state.selectEverything) {
+    state.selectEverything = false;
+    state.selected.clear();
+  } else {
+    state.selectEverything = true;
+  }
+  applySelectionUI();
+});
+// D1 caps a statement at 100 bound parameters; keep every request below that
+const BULK_CHUNK = 90;
+
+async function sendBulk(endpoint, extra = {}) {
+  if (state.selectEverything) {
+    await apiCall(endpoint, { method: "POST", body: { all: true, ...extra } });
+    return;
+  }
   const ids = [...state.selected];
-  if (ids.length === 0) return;
-  if (!confirm(`選択した${ids.length}件のメールを削除しますか？`)) return;
+  for (let i = 0; i < ids.length; i += BULK_CHUNK) {
+    await apiCall(endpoint, { method: "POST", body: { ids: ids.slice(i, i + BULK_CHUNK), ...extra } });
+  }
+}
+
+$("bulkDeleteBtn").addEventListener("click", async () => {
+  const everything = state.selectEverything;
+  const ids = [...state.selected];
+  const count = everything ? state.serverTotal : ids.length;
+  if (count === 0) return;
+  const question = everything
+    ? `受信トレイのメール${count}件をすべて削除しますか？\nこの操作は取り消せません。`
+    : `選択した${count}件のメールを削除しますか？`;
+  if (!confirm(question)) return;
   const btn = $("bulkDeleteBtn");
   btn.disabled = true;
   try {
-    for (let i = 0; i < ids.length; i += 100) {
-      await apiCall("/messages/delete", { method: "POST", body: { ids: ids.slice(i, i + 100) } });
+    await sendBulk("/messages/delete");
+    if (everything) {
+      state.raw = [];
+      state.metaCache.clear();
+      state.aesKeyCache.clear();
+      state.hasMore = false;
+      state.serverTotal = 0;
+      state.serverUnread = 0;
+      state.lastMsgSig = null;
+    } else {
+      removeLocalMessages(ids);
     }
-    removeLocalMessages(ids);
     exitSelectMode();
-    showToast(`${ids.length}件を削除しました`);
+    showToast(`${count}件を削除しました`);
     await renderMessages(state.raw);
-    refreshMessages();
+    refreshMessages(everything);
   } catch (e) {
     showToast("削除に失敗しました");
     btn.disabled = false;
+    // part of a chunked request may have gone through; resync from the server
+    state.lastMsgSig = null;
+    refreshMessages(true);
+  }
+});
+
+$("bulkReadBtn").addEventListener("click", async () => {
+  const everything = state.selectEverything;
+  const ids = [...state.selected];
+  const count = everything ? state.serverTotal : ids.length;
+  if (count === 0) return;
+  const btn = $("bulkReadBtn");
+  btn.disabled = true;
+  try {
+    await sendBulk("/messages/read");
+    const target = everything ? null : new Set(ids);
+    state.raw.forEach((m) => {
+      if (!target || target.has(m.id)) m.seen = 1;
+    });
+    if (everything) state.serverUnread = 0;
+    state.lastMsgSig = null;
+    exitSelectMode();
+    showToast(`${count}件を既読にしました`);
+    await renderMessages(state.raw);
+    refreshMessages();
+  } catch (e) {
+    showToast("既読にできませんでした");
+    btn.disabled = false;
+    state.lastMsgSig = null;
+    refreshMessages(true);
   }
 });
 document.addEventListener("keydown", (ev) => {
