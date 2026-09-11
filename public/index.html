@@ -862,7 +862,7 @@
       <div class="danger-title">アカウントの削除</div>
       <div class="helper">アカウント、届いたメール、匿名アドレスがすべて消えます。元に戻すことはできません。</div>
       <div id="deleteAccError" class="auth-error hidden"></div>
-      <div class="field">
+      <div class="field hidden" id="deletePwField">
         <label for="deletePwInput">パスワード</label>
         <input id="deletePwInput" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" placeholder="削除するにはパスワードを入力">
       </div>
@@ -2345,8 +2345,15 @@ $("logoutBtn").addEventListener("click", async () => {
   try { await apiCall("/logout", { method: "POST" }); } catch (e) {}
   exitApp();
 });
-// Deleting lives only in settings. It needs the account password, checked here by
-// opening the private key and again by the server, and then two confirmations.
+// Deleting lives only in settings: two confirmations first, and only then the
+// account password, checked here by opening the private key and again by the server.
+const resetDeleteStep = () => {
+  $("deletePwField").classList.add("hidden");
+  $("deletePwInput").value = "";
+  $("deleteAccBtn").textContent = "アカウントを削除する";
+  $("deleteAccError").classList.add("hidden");
+};
+
 $("deleteAccBtn").addEventListener("click", async () => {
   const errEl = $("deleteAccError");
   const fail = (msg) => {
@@ -2354,6 +2361,17 @@ $("deleteAccBtn").addEventListener("click", async () => {
     errEl.classList.remove("hidden");
   };
   errEl.classList.add("hidden");
+
+  // First press: confirm twice, then ask for the password.
+  if ($("deletePwField").classList.contains("hidden")) {
+    if (!confirm("【確認 1/2】アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
+    if (!confirm("【確認 2/2】本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
+    $("deletePwField").classList.remove("hidden");
+    $("deleteAccBtn").textContent = "パスワードを入力して削除する";
+    $("deletePwInput").focus();
+    return;
+  }
+
   const password = $("deletePwInput").value;
   if (!password) return fail("パスワードを入力してください。");
 
@@ -2373,11 +2391,9 @@ $("deleteAccBtn").addEventListener("click", async () => {
     btn.textContent = label;
   }
 
-  if (!confirm("【確認 1/2】アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
-  if (!confirm("【確認 2/2】本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
   try {
     await apiCall("/me", { method: "DELETE", body: { auth_verifier: auth.verifier } });
-    $("deletePwInput").value = "";
+    resetDeleteStep();
     closeModal("accountModal");
     showToast("アカウントを削除しました");
     exitApp();
@@ -2530,8 +2546,7 @@ function openAccountPanel() {
   renderAccountPanel();
   $("pwChangeForm").classList.add("hidden");
   $("pwChangeToggle").textContent = "パスワードを変更";
-  $("deletePwInput").value = "";
-  $("deleteAccError").classList.add("hidden");
+  resetDeleteStep();
   openModal("accountModal");
   setPath(routeFor.accountModal);
 }
