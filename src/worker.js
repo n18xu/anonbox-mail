@@ -49,7 +49,7 @@ const SESSION_TTL_MS = 90 * 24 * 3600 * 1000;
 const PBKDF2_ITERATIONS = 100000;   // server-side hardening of the client's verifier
 const AUTH_VERSION = 2;             // v2 = the password never reaches the server
 
-// login throttling
+// login throttling: failed logins per address, stored under a hash of the address
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_MAX_FAILS = 8;
 const RATE_BLOCK_MS = 15 * 60 * 1000;
@@ -165,8 +165,28 @@ const messageIds = (ids) =>
     .slice(0, MAX_BULK_IDS);
 
 // ===== login throttling =====
+// Nothing that identifies a visitor is written anywhere. Per-visitor limits use
+// Cloudflare's rate limiter, which only keeps short-lived counters in memory, and
+// the failure count per address is stored under a hash of the address.
 
-const clientIp = (req) => req.headers.get("CF-Connecting-IP") || "unknown";
+const VISITOR_RETRY_S = 60;
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return bytesToHex(new Uint8Array(digest));
+}
+
+// true when this visitor has gone over the limiter's budget for the current minute
+async function visitorLimited(limiter, req) {
+  if (!limiter) return false;
+  const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+  const key = (await sha256Hex("anonbox.ratelimit:" + ip)).slice(0, 32);
+  const { success } = await limiter.limit({ key });
+  return !success;
+}
+
+const loginThrottleKey = async (inbox) =>
+  "login:" + (await sha256Hex("anonbox.login:" + inbox)).slice(0, 32);
 
 async function throttleCheck(env, keys) {
   const now = Date.now();
@@ -654,9 +674,7 @@ export default {
         if (!parsed) return err("invalid address (use name@" + DOMAIN + ", name=3-32 chars)");
         if (!isValidInbox(parsed.inbox)) return err("invalid inbox name");
         if (!isAuthVerifier(body.auth_verifier)) return err("invalid auth verifier");
-        const signupKeys = ["ip:" + clientIp(req)];
-        const signupWait = await throttleCheck(env, signupKeys);
-        if (signupWait) return tooManyAttempts(signupWait);
+        if (await visitorLimited(env.SIGNUP_LIMIT, req)) return tooManyAttempts(VISITOR_RETRY_S);
         if (
           typeof body.public_key !== "string" ||
           typeof body.encrypted_private_key !== "string" ||
@@ -669,10 +687,7 @@ export default {
         const existing = await env.DB.prepare(`SELECT 1 FROM accounts WHERE inbox = ?`)
           .bind(parsed.inbox)
           .first();
-        if (existing) {
-          await throttleFail(env, signupKeys);
-          return err("address already taken", 409);
-        }
+        if (existing) return err("address already taken", 409);
 
         // the verifier is already a slow-KDF output; hashing it again means a
         // database leak does not hand out working credentials
@@ -705,7 +720,8 @@ export default {
         const parsed = parseAddress(body.address);
         if (!parsed) return err("invalid credentials", 401);
 
-        const keys = ["login:" + parsed.inbox, "ip:" + clientIp(req)];
+        if (await visitorLimited(env.LOGIN_LIMIT, req)) return tooManyAttempts(VISITOR_RETRY_S);
+        const keys = [await loginThrottleKey(parsed.inbox)];
         const wait = await throttleCheck(env, keys);
         if (wait) return tooManyAttempts(wait);
 

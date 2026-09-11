@@ -22,3 +22,19 @@ crons = ["0 * * * *"]
 RETENTION_HOURS = "720"
 VAPID_PUBLIC_KEY = "BGRdfWRgReTghnOXPnnb_iRKA23GmmT71WxQnSNKWswIi8p7jfarD5jDdxbeZzPk_NUuT2vVdQj6g_T0RGzbebU"
 VAPID_SUBJECT = "mailto:admin@anonbox.email"
+
+# Per-visitor limits for signup and login. The counters live only in Cloudflare's
+# rate limiter memory; no IP address is written to the database.
+[[ratelimits]]
+name = "SIGNUP_LIMIT"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "LOGIN_LIMIT"
+namespace_id = "1002"
+simple = { limit = 20, period = 60 }
+
+# No persisted request logs: they would carry visitor IPs and headers
+[observability]
+enabled = false
