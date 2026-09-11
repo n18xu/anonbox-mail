@@ -2364,8 +2364,8 @@ $("deleteAccBtn").addEventListener("click", async () => {
 
   // First press: confirm twice, then ask for the password.
   if ($("deletePwField").classList.contains("hidden")) {
-    if (!confirm("【確認 1/2】アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
-    if (!confirm("【確認 2/2】本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
+    if (!confirm("アカウントを削除しますか？\nすべてのメールと匿名アドレスも消えます。")) return;
+    if (!confirm("本当に削除しますか？\n削除したアカウントとメールは元に戻せません。")) return;
     $("deletePwField").classList.remove("hidden");
     $("deleteAccBtn").textContent = "パスワードを入力して削除する";
     $("deletePwInput").focus();
