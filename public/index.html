@@ -2366,9 +2366,7 @@ $("logoutBtn").addEventListener("click", async () => {
   try { await apiCall("/logout", { method: "POST" }); } catch (e) {}
   exitApp();
 });
-// Announcements: only the support inbox sees this, and the server checks again.
-const isAdminAccount = () => (state.address || "").split("@")[0] === "admin";
-
+// Announcements: the server decides who sees this form and checks again on send.
 const setBroadcastStatus = (msg) => {
   $("broadcastStatus").textContent = msg || "";
 };
@@ -2614,16 +2612,21 @@ const renderAccountPanel = () => {
   $("pwChangeError").classList.add("hidden");
 };
 
-function openAccountPanel() {
+async function openAccountPanel() {
   renderAccountPanel();
   $("pwChangeForm").classList.add("hidden");
   $("pwChangeToggle").textContent = "パスワードを変更";
   resetDeleteStep();
-  $("broadcastSection").classList.toggle("hidden", !isAdminAccount());
+  $("broadcastSection").classList.add("hidden");
   $("broadcastError").classList.add("hidden");
   setBroadcastStatus("");
   openModal("accountModal");
   setPath(routeFor.accountModal);
+  // only the server knows which account may write to everyone
+  try {
+    const acc = await apiCall("/me");
+    $("broadcastSection").classList.toggle("hidden", !acc.can_broadcast);
+  } catch (e) {}
 }
 
 $("settingsBtn").addEventListener("click", openAccountPanel);

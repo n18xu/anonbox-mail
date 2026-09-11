@@ -159,6 +159,14 @@ const ADMIN_INBOX = "admin";
 // Nobody may sign these up: admin is the support inbox, the one account allowed
 // to write into every mailbox, and the others are the addresses mail software
 // and abuse reports expect to reach the operator.
+// Holding the admin inbox is not enough to write to every mailbox: the operator
+// has to name the exact account in BROADCAST_ACCOUNT_ID. With the var unset -
+// the default - nobody can broadcast.
+const canBroadcast = (env, me) => {
+  const allowed = String(env.BROADCAST_ACCOUNT_ID || "").trim();
+  return Boolean(allowed) && me.inbox === ADMIN_INBOX && me.account_id === allowed;
+};
+
 const RESERVED_INBOXES = new Set([
   ADMIN_INBOX, "support", "postmaster", "abuse", "security", "noreply",
   "no-reply", "info", "root", "webmaster", "hostmaster",
@@ -882,7 +890,7 @@ export default {
       // nothing leaves the service and the bodies stay unreadable to the server.
       if (path === "/api/broadcast" && req.method === "POST") {
         if (!me) return err("unauthorized", 401);
-        if (me.inbox !== ADMIN_INBOX) return err("forbidden", 403);
+        if (!canBroadcast(env, me)) return err("forbidden", 403);
         const body = await req.json().catch(() => ({}));
         const subject = typeof body.subject === "string" ? body.subject.trim() : "";
         const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -963,6 +971,7 @@ export default {
             id: me.account_id,
             address: me.address,
             created_at: me.created_at,
+            can_broadcast: canBroadcast(env, me),
             encrypted_private_key: acc?.encrypted_private_key,
             pk_iv: acc?.pk_iv,
             kdf_salt: acc?.kdf_salt,
