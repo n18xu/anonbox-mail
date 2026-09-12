@@ -48,3 +48,9 @@ class_name = "VisitorLimiter"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["VisitorLimiter"]
+
+# Replies from the support desk to addresses outside this domain. Only the
+# support address may be used as the sender.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["admin@anonbox.email"]

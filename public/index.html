@@ -2441,6 +2441,15 @@ const sendErrorText = (e) => {
   if (/invalid subject/.test(raw)) return "件名が長すぎます（200文字まで）。";
   if (/invalid text/.test(raw)) return "本文が長すぎます（20000文字まで）。";
   if (e?.status === 403) return "このアカウントでは送信できません。";
+  if (/E_RECIPIENT_NOT_ALLOWED/.test(raw)) {
+    return "この宛先にはまだ送れません。Cloudflare の Email Sending に anonbox.email を登録すると、外部のアドレスへ送れるようになります。";
+  }
+  if (/E_SENDER_NOT_VERIFIED|E_SENDER_DOMAIN_NOT_AVAILABLE/.test(raw)) {
+    return "差出人ドメインが未登録です。Cloudflare の Email Sending に anonbox.email を登録してください。";
+  }
+  if (/E_RECIPIENT_SUPPRESSED/.test(raw)) return "この宛先は配信停止リストに入っています（過去に不達またはスパム報告）。";
+  if (/E_RATE_LIMIT_EXCEEDED|E_DAILY_LIMIT_EXCEEDED/.test(raw)) return "送信の上限に達しました。時間をおいてからお試しください。";
+  if (/E_CONTENT_TOO_LARGE/.test(raw)) return "内容が大きすぎます。";
   if (e?.status === 502) return "送信できませんでした（メール配信側のエラー）。しばらくしてからお試しください。";
   return "送信できませんでした: " + raw;
 };

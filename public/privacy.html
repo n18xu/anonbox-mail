@@ -337,11 +337,19 @@
       <tr><td>IP アドレス・アクセスログ</td><td class="mark no">保存しません</td></tr>
       <tr><td>登録時の個人情報</td><td class="mark no">要求しません（電話番号・本人確認なし）</td></tr>
       <tr><td>アドレスと受信日時</td><td class="mark yes">保持します（配送に必要なため）</td></tr>
+      <tr><td>運営（admin@anonbox.email）が送るメール</td><td class="mark yes">運営が書いた内容なので、運営には読めます</td></tr>
     </table>
     <p class="muted" style="margin-top:1rem;font-size:0.875rem;">
       追跡目的の Cookie、アクセス解析、広告ネットワーク、第三者トラッカーは一切使っていません。
       新規登録やログインの連続試行は、Cloudflare のレート制限で短時間だけ数えて止めています。
       IP アドレスはデータベースにもログにも保存しません（通信を中継する Cloudflare は、仕組み上 IP アドレスを扱います）。
+    </p>
+    <p class="muted" style="margin-top:0.75rem;font-size:0.875rem;">
+      なお、運営（admin@anonbox.email）からお送りするお知らせやサポートの返信は、運営が書いたものなので暗号化の対象外です
+      （お客さまの受信箱に保存する際は、他のメールと同じようにお客さまの公開鍵で暗号化します）。
+      anonbox.email の外のアドレスへ返信する場合、その内容は通常のメールとしてインターネットを流れます。
+      運営から届いたメールには<b>公式マーク</b>が付きます。これはサービス自身が書き込んだメールにのみ付くため、
+      差出人欄を admin@anonbox.email に偽装した外部からのメールには付きません。
     </p>
   </section>
 
