@@ -128,15 +128,17 @@
   .verified {
     display: inline-flex;
     align-items: center;
-    gap: 0.15rem;
-    margin-left: 0.3rem;
+    gap: 0.2em;
+    margin-left: 0.35rem;
     flex: none;
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 600;
+    line-height: 1;
     color: var(--accent);
     white-space: nowrap;
   }
-  .verified svg { width: 0.95rem; height: 0.95rem; }
+  .verified svg { width: 1.05em; height: 1.05em; flex: none; }
+  .meta-from .verified { font-size: 0.78rem; }
   .verified-note { color: var(--accent); font-size: 0.72rem; margin-top: 0.15rem; }
 
   /* AUTH */
@@ -334,7 +336,7 @@
   .msg.selected .check { background: var(--accent); border-color: var(--accent); color: #fff; }
   .msg .body { flex: 1; min-width: 0; }
   .msg .row { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
-  .msg .from-wrap { display: flex; align-items: baseline; min-width: 0; }
+  .msg .from-wrap { display: flex; align-items: center; min-width: 0; }
   .msg .from { font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .msg.unread .from { font-weight: 700; }
   .msg .time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; transition: opacity 0.15s; }
@@ -882,7 +884,7 @@
     <div id="composeSection" class="hidden">
       <hr class="section-sep">
       <div class="danger-title">メールを送る</div>
-      <div class="helper">admin@anonbox.email から1件だけ送ります。宛先が anonbox.email なら、そのまま相手の受信トレイに暗号化して届きます。</div>
+      <div class="helper" id="composeHelp">admin@anonbox.email から1件だけ送ります。宛先が anonbox.email なら、そのまま相手の受信トレイに暗号化して届きます。</div>
       <div id="composeError" class="auth-error hidden"></div>
       <div class="field">
         <label for="composeTo">宛先</label>
@@ -2428,6 +2430,21 @@ $("logoutBtn").addEventListener("click", async () => {
 });
 // Sending as the support desk. The server decides who may do this and checks
 // again on every send; the page only mirrors that answer.
+// The API answers in English; the screen is Japanese.
+const sendErrorText = (e) => {
+  const raw = String(e?.message || "");
+  if (e?.status === 503 || /not switched on/.test(raw)) {
+    return "anonbox.email 以外のアドレスへの送信は、まだ有効になっていません。";
+  }
+  if (e?.status === 404 || /no such address/.test(raw)) return "そのアドレスは存在しません。";
+  if (/invalid recipient/.test(raw)) return "宛先の形式が正しくありません。";
+  if (/invalid subject/.test(raw)) return "件名が長すぎます（200文字まで）。";
+  if (/invalid text/.test(raw)) return "本文が長すぎます（20000文字まで）。";
+  if (e?.status === 403) return "このアカウントでは送信できません。";
+  if (e?.status === 502) return "送信できませんでした（メール配信側のエラー）。しばらくしてからお試しください。";
+  return "送信できませんでした: " + raw;
+};
+
 const setComposeStatus = (msg) => {
   $("composeStatus").textContent = msg || "";
 };
@@ -2462,7 +2479,7 @@ $("composeBtn").addEventListener("click", async () => {
     showToast("送信しました");
     refreshMessages();
   } catch (e) {
-    fail("送信できませんでした: " + e.message);
+    fail(sendErrorText(e));
   } finally {
     btn.disabled = false;
     btn.textContent = label;
@@ -2746,8 +2763,12 @@ async function openAccountPanel() {
   try {
     const acc = await apiCall("/me");
     state.canSend = Boolean(acc.can_send);
+    state.canSendExternal = Boolean(acc.can_send_external);
     $("broadcastSection").classList.toggle("hidden", !acc.can_broadcast);
     $("composeSection").classList.toggle("hidden", !acc.can_send);
+    $("composeHelp").textContent = acc.can_send_external
+      ? "admin@anonbox.email から1件だけ送ります。宛先が anonbox.email なら、そのまま相手の受信トレイに暗号化して届きます。"
+      : "admin@anonbox.email から1件だけ送ります。いまは anonbox.email 宛にのみ送信できます（外部への送信は未開通）。";
   } catch (e) {}
 }
 

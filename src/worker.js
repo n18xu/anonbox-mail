@@ -1074,6 +1074,8 @@ export default {
             created_at: me.created_at,
             can_broadcast: isSupportAccount(env, me),
             can_send: isSupportAccount(env, me),
+            // whether mail can leave for addresses outside this domain
+            can_send_external: isSupportAccount(env, me) && Boolean(env.EMAIL),
             encrypted_private_key: acc?.encrypted_private_key,
             pk_iv: acc?.pk_iv,
             kdf_salt: acc?.kdf_salt,
