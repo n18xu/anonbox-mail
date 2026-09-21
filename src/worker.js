@@ -356,6 +356,9 @@ const tooManyAttempts = (retryAfter) =>
   });
 
 const ALIAS_LOCAL_LENGTH = 15;
+// labels arrive already encrypted with the account's public key; this is just a
+// sanity bound on the ciphertext an RSA-2048 label produces
+const ALIAS_LABEL_MAX = 1024;
 const isValidAliasLocal = (s) => /^[0-9]{15}$/.test(s);
 
 function randomAliasLocal() {
@@ -1064,7 +1067,7 @@ export default {
         if (!me) return err("unauthorized", 401);
         if (req.method === "GET") {
           const acc = await env.DB.prepare(
-            `SELECT encrypted_private_key, pk_iv, kdf_salt FROM accounts WHERE id = ?`
+            `SELECT public_key, encrypted_private_key, pk_iv, kdf_salt FROM accounts WHERE id = ?`
           )
             .bind(me.account_id)
             .first();
@@ -1076,6 +1079,7 @@ export default {
             can_send: isSupportAccount(env, me),
             // whether mail can leave for addresses outside this domain
             can_send_external: isSupportAccount(env, me) && Boolean(env.EMAIL),
+            public_key: acc?.public_key,
             encrypted_private_key: acc?.encrypted_private_key,
             pk_iv: acc?.pk_iv,
             kdf_salt: acc?.kdf_salt,
@@ -1190,7 +1194,7 @@ export default {
       if (path === "/api/aliases" && req.method === "GET") {
         if (!me) return err("unauthorized", 401);
         const { results } = await env.DB.prepare(
-          `SELECT address, created_at FROM aliases WHERE account_id = ? ORDER BY created_at DESC`
+          `SELECT address, created_at, label_encrypted FROM aliases WHERE account_id = ? ORDER BY created_at DESC`
         )
           .bind(me.account_id)
           .all();
@@ -1198,6 +1202,7 @@ export default {
           aliases: results.map((r) => ({
             address: `${r.address}@${DOMAIN}`,
             created_at: r.created_at,
+            label_encrypted: r.label_encrypted || null,
           })),
         });
       }
@@ -1215,6 +1220,26 @@ export default {
       }
 
       const aliasMatch = path.match(/^\/api\/aliases\/([^/]+)$/);
+      if (aliasMatch && req.method === "PATCH") {
+        if (!me) return err("unauthorized", 401);
+        const aliasAddr = decodeURIComponent(aliasMatch[1]).toLowerCase();
+        const parsedAlias = parseAddress(aliasAddr);
+        if (!parsedAlias || !isValidAliasLocal(parsedAlias.inbox)) return err("invalid alias address");
+        const body = await req.json().catch(() => ({}));
+        // the label is ciphertext the browser produced; the server only stores it
+        const label = body.label_encrypted === undefined ? null : body.label_encrypted;
+        if (label !== null && (typeof label !== "string" || label.length > ALIAS_LABEL_MAX)) {
+          return err("invalid label");
+        }
+        const res = await env.DB.prepare(
+          `UPDATE aliases SET label_encrypted = ? WHERE address = ? AND account_id = ?`
+        )
+          .bind(label, parsedAlias.inbox, me.account_id)
+          .run();
+        if (!res.meta.changes) return err("alias not found", 404);
+        return json({ ok: true });
+      }
+
       if (aliasMatch && req.method === "DELETE") {
         if (!me) return err("unauthorized", 401);
         const aliasAddr = decodeURIComponent(aliasMatch[1]).toLowerCase();
