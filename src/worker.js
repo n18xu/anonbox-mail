@@ -805,8 +805,14 @@ export default {
           return err("missing crypto material");
         }
 
-        const existing = await env.DB.prepare(`SELECT 1 FROM accounts WHERE inbox = ?`)
-          .bind(parsed.inbox)
+        // an anonymous address with this name already routes mail to someone; letting
+        // a new account take the name would quietly steal that mail
+        const existing = await env.DB.prepare(
+          `SELECT 1 FROM accounts WHERE inbox = ?
+           UNION ALL
+           SELECT 1 FROM aliases WHERE address = ?`
+        )
+          .bind(parsed.inbox, parsed.inbox)
           .first();
         if (existing) return err("address already taken", 409);
 
