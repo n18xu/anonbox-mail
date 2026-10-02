@@ -59,9 +59,7 @@ CREATE INDEX idx_push_account ON push_subscriptions(account_id);
 CREATE TABLE aliases (
   address TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  -- name the owner gave this address, encrypted in their browser
-  label_encrypted TEXT
+  created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_aliases_account ON aliases(account_id, created_at DESC);
 
