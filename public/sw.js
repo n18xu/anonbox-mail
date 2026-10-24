@@ -21,7 +21,7 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icon.svg",
     badge: "/icon.svg",
-    data: { messageId: data.messageId, to: data.to },
+    data: { messageId: data.messageId, to: data.to, url: data.url },
     tag: data.messageId || "mail-notif",
     requireInteraction: false,
   };
@@ -31,14 +31,18 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // only paths on this site, so a payload can never send the app elsewhere
+  const raw = event.notification.data && event.notification.data.url;
+  const target = typeof raw === "string" && /^\/[a-z]*$/.test(raw) ? raw : "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const c of clients) {
         if (c.url.includes(self.location.origin)) {
+          if (target !== "/") c.postMessage({ type: "open", path: target });
           return c.focus();
         }
       }
-      return self.clients.openWindow("/");
+      return self.clients.openWindow(target);
     })
   );
 });

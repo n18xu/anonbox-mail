@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS support_messages;
 DROP TABLE IF EXISTS login_attempts;
 DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS aliases;
@@ -70,3 +71,21 @@ CREATE TABLE login_attempts (
   blocked_until INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_login_attempts_blocked ON login_attempts(blocked_until);
+
+-- The in-site support chat. One conversation per account; each line is encrypted
+-- in the browser and its AES key is wrapped for the account (key_user) and for
+-- the support desk (key_staff), so the server never sees the text.
+CREATE TABLE support_messages (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  sender TEXT NOT NULL CHECK (sender IN ('user', 'staff')),
+  iv TEXT NOT NULL,
+  body TEXT NOT NULL,
+  key_user TEXT NOT NULL,
+  key_staff TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read_by_user INTEGER NOT NULL DEFAULT 0,
+  read_by_staff INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_support_account ON support_messages(account_id, created_at);
+CREATE INDEX idx_support_created ON support_messages(created_at);

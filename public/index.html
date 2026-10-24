@@ -384,6 +384,8 @@
     max-width: 720px;
     max-height: 88vh;
     padding: 0;
+    /* the * reset zeroes the browser's own margin: auto, which is what centres a modal */
+    margin: auto;
     box-shadow: var(--shadow-2);
     overflow: hidden;
     opacity: 0;
@@ -480,6 +482,70 @@
   .source-title { font-size: 0.875rem; font-weight: 500; }
   .source-note { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
   .source-arrow { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
+  button.source-link { width: 100%; background: transparent; text-align: left; font-weight: 400; }
+
+  /* SUPPORT */
+  .support-fab {
+    position: fixed; z-index: 20;
+    right: 1.25rem; bottom: max(1.25rem, env(safe-area-inset-bottom));
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.7rem 1.05rem; border-radius: 999px;
+    background: var(--accent); color: #fff;
+    font-size: 0.875rem; font-weight: 500;
+    box-shadow: var(--shadow-2);
+  }
+  .support-fab:hover { background: var(--accent-hover); }
+  .support-fab svg { width: 18px; height: 18px; display: block; }
+  .count-badge {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+    background: var(--danger); color: var(--bg);
+    font-size: 0.6875rem; font-weight: 600; line-height: 18px; text-align: center;
+  }
+  .support-fab .count-badge { position: absolute; top: -4px; right: -4px; box-shadow: 0 0 0 2px var(--bg); }
+  .main { padding-bottom: 5.5rem; }
+  #supportModal { max-width: 560px; height: min(80vh, 720px); }
+  #supportModal .modal-head { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+  #supportModal .modal-head .subject { font-size: 1.0625rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .support-log {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;
+  }
+  .support-intro {
+    font-size: 0.8125rem; color: var(--muted); line-height: 1.65;
+    background: var(--chip); border-radius: 8px; padding: 0.75rem 0.9rem;
+  }
+  .bubble-row { display: flex; flex-direction: column; align-items: flex-start; }
+  .bubble-row.mine { align-items: flex-end; }
+  .bubble {
+    max-width: 82%; padding: 0.55rem 0.8rem; border-radius: 14px 14px 14px 4px;
+    background: var(--chip); color: var(--text);
+    white-space: pre-wrap; word-break: break-word; font-size: 0.9375rem; line-height: 1.55;
+  }
+  .bubble-row.mine .bubble { background: var(--accent-soft); border-radius: 14px 14px 4px 14px; }
+  .bubble-who { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); margin: 0 0.3rem 0.2rem; }
+  .bubble-time { font-size: 0.6875rem; color: var(--faint); margin: 0.2rem 0.35rem 0; }
+  .bubble-broken { color: var(--faint); font-style: italic; }
+  .support-compose {
+    flex-shrink: 0; display: flex; gap: 0.5rem; align-items: flex-end;
+    padding: 0.75rem 1rem; border-top: 1px solid var(--divider);
+  }
+  .support-compose textarea { flex: 1; min-height: 2.75rem; max-height: 9rem; resize: none; padding: 0.6rem 0.8rem; }
+  .support-compose button { flex-shrink: 0; height: 2.75rem; }
+  .support-threads { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .thread-item {
+    display: flex; align-items: center; gap: 0.75rem; width: 100%;
+    padding: 0.85rem 1.25rem; border-radius: 0; text-align: left;
+    background: transparent; color: var(--text); font-weight: 400;
+    border-bottom: 1px solid var(--divider);
+  }
+  .thread-item:hover { background: var(--hover); }
+  .thread-addr { flex: 1; min-width: 0; font-family: var(--mono); font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thread-time { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; }
+  @media (max-width: 600px) {
+    #supportModal { height: 100dvh; }
+    .support-fab { right: 1rem; padding: 0.65rem 0.95rem; }
+    .support-compose { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  }
 
   .migrate-banner {
     display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
@@ -702,6 +768,14 @@
     </div>
 
   </main>
+
+  <button class="support-fab" id="supportFab" type="button" title="カスタマーサポートに相談する" aria-label="カスタマーサポートに相談する">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <span>サポート</span>
+    <span class="count-badge hidden" id="supportBadge" aria-label="未読の返信"></span>
+  </button>
 </div>
 
 <dialog id="modal">
@@ -799,6 +873,19 @@
     </div>
 
     <hr class="section-sep">
+
+    <button type="button" class="source-link" id="supportLink" style="margin-bottom:0.6rem;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <div class="source-text">
+        <div class="source-title">カスタマーサポートに相談する</div>
+        <div class="source-note">運営スタッフとサイト内のチャットで直接やり取りできます</div>
+      </div>
+      <svg class="source-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </button>
 
     <a class="source-link" id="privacyLink" href="/privacy" target="_blank" rel="noopener noreferrer" style="margin-bottom:0.6rem;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);">
@@ -934,6 +1021,29 @@
   <div class="modal-actions">
     <button class="ghost" id="pwChangeToggle">パスワードを変更</button>
   </div>
+</dialog>
+
+<dialog id="supportModal">
+  <div class="modal-head">
+    <button class="icon-btn hidden" id="supportBack" title="一覧に戻る" aria-label="一覧に戻る">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+    <div class="subject" id="supportTitle">カスタマーサポート</div>
+    <button class="modal-close" id="supportModalClose" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  <div class="support-threads hidden" id="supportThreads"></div>
+  <div class="support-log" id="supportLog" aria-live="polite"></div>
+  <form class="support-compose hidden" id="supportForm">
+    <textarea id="supportInput" rows="1" maxlength="4000" placeholder="メッセージを入力" aria-label="メッセージ"></textarea>
+    <button type="submit" class="primary" id="supportSend">送信</button>
+  </form>
 </dialog>
 
 <div class="toast" id="toast"></div>
@@ -1635,12 +1745,15 @@ const enterApp = async () => {
   if (wanted && wanted !== "/") applyPath(wanted);
   state.pollTimer = setInterval(() => refreshMessages(false), 5000);
   state.timeTimer = setInterval(updateRelativeTimes, 30000);
+  refreshSupportBadge();
+  support.badgeTimer = setInterval(refreshSupportBadge, 30000);
   await checkPushSubscription();
 };
 
 const exitApp = async () => {
   clearInterval(state.pollTimer);
   clearInterval(state.timeTimer);
+  resetSupport();
   state.lastMsgSig = null;
   state.token = null;
   state.address = null;
@@ -2213,7 +2326,7 @@ const setPath = (path, replace) => {
   } catch (e) {}
 };
 
-const routeFor = { accountModal: "/setting", aliasModal: "/anonaddress" };
+const routeFor = { accountModal: "/setting", aliasModal: "/anonaddress", supportModal: "/support" };
 
 function applyPath(path) {
   if (!state.token) {
@@ -2237,6 +2350,10 @@ function applyPath(path) {
     }
     if (path === "/anonaddress") {
       openAliasPanel();
+      return;
+    }
+    if (path === "/support") {
+      openSupportPanel();
       return;
     }
   } finally {
@@ -2897,6 +3014,344 @@ $("pwChangeForm").addEventListener("submit", async (e) => {
     btn.textContent = label;
   }
 });
+
+// SUPPORT
+// A chat with the support desk that never leaves the site. Each line is encrypted
+// here with a fresh AES key, wrapped once for this account and once for the
+// support desk, so only the two ends can read it - the server stores ciphertext.
+const SUPPORT_TEXT_MAX = 4000;
+const SUPPORT_POLL_MS = 4000;
+const support = {
+  open: false,
+  timer: null,
+  badgeTimer: null,
+  busy: false,
+  staff: false,
+  available: false,
+  myKey: null,
+  staffKey: null,
+  thread: null,    // staff only: the conversation being read
+  threads: [],
+  lines: [],
+  lastAt: 0,
+  text: new Map(), // decrypted lines by id
+};
+
+const importRsaPublicKey = (b64) =>
+  crypto.subtle.importKey("spki", b64ToBytes(b64), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+
+async function encryptSupportLine(text, userKeyB64, staffKeyB64) {
+  const aes = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", aes));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const body = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aes, new TextEncoder().encode(text))
+  );
+  const wrapFor = async (keyB64) =>
+    bytesToB64(new Uint8Array(
+      await crypto.subtle.encrypt({ name: "RSA-OAEP" }, await importRsaPublicKey(keyB64), raw)
+    ));
+  return {
+    iv: bytesToB64(iv),
+    body: bytesToB64(body),
+    key_user: await wrapFor(userKeyB64),
+    key_staff: await wrapFor(staffKeyB64),
+  };
+}
+
+async function supportText(line) {
+  if (support.text.has(line.id)) return support.text.get(line.id);
+  let text = null;
+  try {
+    const aesKey = await decryptAesKey(state.privateKey, line.key);
+    text = await aesDecrypt(aesKey, line.iv, line.body);
+  } catch (e) {}
+  support.text.set(line.id, text);
+  return text;
+}
+
+const supportTime = (ts) =>
+  new Date(ts).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+const supportPath = () =>
+  support.staff ? "/support/threads/" + encodeURIComponent(support.thread.account_id) : "/support";
+
+const setSupportBadge = (n) => {
+  const b = $("supportBadge");
+  b.textContent = n > 9 ? "9+" : String(n || "");
+  b.classList.toggle("hidden", !n);
+};
+
+const refreshSupportBadge = async () => {
+  if (!state.token) return;
+  try {
+    const { unread } = await apiCall("/support/unread");
+    // the conversation on screen is already being read
+    setSupportBadge(support.open && !support.staff ? 0 : unread);
+  } catch (e) {}
+};
+
+const setSupportIntro = (html) => {
+  $("supportLog").innerHTML = `<div class="support-intro">${html}</div>`;
+};
+
+const showSupportCompose = (on) => {
+  $("supportForm").classList.toggle("hidden", !on);
+};
+
+async function paintSupportLog(toBottom) {
+  const log = $("supportLog");
+  const mineSender = support.staff ? "staff" : "user";
+  let intro;
+  if (support.staff) {
+    intro = `${escapeHtml(support.thread.address)} とのやり取りです。返信は相手のサポート画面に届きます。`;
+  } else if (support.available) {
+    intro = "AnonBox の運営スタッフにチャットで相談できます。メールアドレスなどの連絡先は不要です。" +
+      "メッセージはこの端末で暗号化され、あなたと運営だけが読めます。返信が届くと右下のボタンと通知でお知らせします。";
+  } else {
+    intro = "現在、サポートの受付を停止しています。時間をおいてもう一度お試しください。";
+  }
+  const rows = await Promise.all(support.lines.map(async (l) => {
+    const text = await supportText(l);
+    const mine = l.sender === mineSender;
+    const who = mine
+      ? ""
+      : l.sender === "staff"
+        ? `<div class="bubble-who">AnonBox 運営${VERIFIED_BADGE}</div>`
+        : `<div class="bubble-who">${escapeHtml(support.thread?.address || "")}</div>`;
+    const body = text === null
+      ? '<span class="bubble-broken">このメッセージは復号できませんでした</span>'
+      : escapeHtml(text);
+    return `<div class="bubble-row${mine ? " mine" : ""}">${who}<div class="bubble">${body}</div>` +
+      `<div class="bubble-time">${supportTime(l.created_at)}</div></div>`;
+  }));
+  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  log.innerHTML = `<div class="support-intro">${intro}</div>` + rows.join("");
+  if (toBottom || nearBottom) log.scrollTop = log.scrollHeight;
+}
+
+// Fetches the conversation on screen (or only what is new) and reports whether
+// anything changed. A reply that lands after the view moved on is dropped.
+async function loadSupportLines(full) {
+  const thread = support.thread;
+  const after = !full && support.lastAt ? "?after=" + support.lastAt : "";
+  const data = await apiCall(supportPath() + after);
+  if (thread !== support.thread || !support.open) return { data, changed: false };
+  const fresh = data.messages || [];
+  if (full) {
+    support.lines = fresh;
+  } else {
+    const known = new Set(support.lines.map((l) => l.id));
+    fresh.forEach((l) => { if (!known.has(l.id)) support.lines.push(l); });
+  }
+  if (support.lines.length) support.lastAt = support.lines[support.lines.length - 1].created_at;
+  return { data, changed: full || fresh.length > 0 };
+}
+
+async function refreshSupportThreads() {
+  const data = await apiCall("/support/threads");
+  if (!support.open || support.thread) return;
+  support.staffKey = data.staff_key || support.staffKey;
+  support.threads = data.threads || [];
+  const box = $("supportThreads");
+  if (!support.threads.length) {
+    box.innerHTML = '<div class="alias-empty">まだ問い合わせはありません</div>';
+    return;
+  }
+  box.innerHTML = support.threads.map((t, i) =>
+    `<button type="button" class="thread-item" data-i="${i}">` +
+      `<span class="thread-addr">${escapeHtml(t.address)}</span>` +
+      (t.unread ? `<span class="count-badge">${t.unread > 99 ? "99+" : t.unread}</span>` : "") +
+      `<span class="thread-time">${supportTime(t.last_at)}</span>` +
+    `</button>`
+  ).join("");
+  box.querySelectorAll(".thread-item").forEach((b) => {
+    b.addEventListener("click", () => openSupportThread(support.threads[+b.dataset.i]));
+  });
+}
+
+async function showSupportThreads() {
+  support.thread = null;
+  support.lines = [];
+  support.lastAt = 0;
+  $("supportTitle").textContent = "サポートへの問い合わせ";
+  $("supportBack").classList.add("hidden");
+  $("supportLog").classList.add("hidden");
+  $("supportThreads").classList.remove("hidden");
+  showSupportCompose(false);
+  try {
+    await refreshSupportThreads();
+  } catch (e) {
+    $("supportThreads").innerHTML = '<div class="alias-empty">読み込みに失敗しました</div>';
+  }
+}
+
+async function openSupportThread(t) {
+  if (!t) return;
+  support.thread = t;
+  support.lines = [];
+  support.lastAt = 0;
+  $("supportTitle").textContent = t.address;
+  $("supportBack").classList.remove("hidden");
+  $("supportThreads").classList.add("hidden");
+  $("supportLog").classList.remove("hidden");
+  setSupportIntro("読み込んでいます…");
+  showSupportCompose(Boolean(support.staffKey && t.public_key));
+  try {
+    const { changed } = await loadSupportLines(true);
+    if (changed) await paintSupportLog(true);
+  } catch (e) {
+    if (support.thread === t) setSupportIntro("読み込みに失敗しました。");
+  }
+}
+
+async function supportTick() {
+  if (!support.open || support.busy || document.hidden) return;
+  support.busy = true;
+  try {
+    if (support.staff && !support.thread) {
+      await refreshSupportThreads();
+    } else {
+      const { changed } = await loadSupportLines(false);
+      if (changed) await paintSupportLog(false);
+    }
+  } catch (e) {
+  } finally {
+    support.busy = false;
+  }
+}
+
+async function openSupportPanel() {
+  support.open = true;
+  support.thread = null;
+  support.lines = [];
+  support.lastAt = 0;
+  $("supportTitle").textContent = "カスタマーサポート";
+  $("supportBack").classList.add("hidden");
+  $("supportThreads").classList.add("hidden");
+  $("supportLog").classList.remove("hidden");
+  setSupportIntro("読み込んでいます…");
+  showSupportCompose(false);
+  openModal("supportModal");
+  setPath(routeFor.supportModal);
+  clearInterval(support.timer);
+  support.timer = setInterval(supportTick, SUPPORT_POLL_MS);
+  try {
+    const data = await apiCall("/support");
+    if (!support.open) return;
+    support.staff = Boolean(data.staff);
+    support.available = Boolean(data.available);
+    support.myKey = data.my_key || null;
+    support.staffKey = data.staff_key || null;
+    if (support.staff) {
+      await showSupportThreads();
+      return;
+    }
+    support.lines = data.messages || [];
+    if (support.lines.length) support.lastAt = support.lines[support.lines.length - 1].created_at;
+    showSupportCompose(support.available && Boolean(support.myKey && support.staffKey));
+    setSupportBadge(0);
+    await paintSupportLog(true);
+    if (!$("supportForm").classList.contains("hidden") && matchMedia("(hover: hover)").matches) {
+      $("supportInput").focus();
+    }
+  } catch (e) {
+    if (e.status === 401) {
+      closeModal("supportModal");
+      exitApp();
+      return;
+    }
+    setSupportIntro("読み込みに失敗しました。時間をおいてもう一度お試しください。");
+  }
+}
+
+function resetSupport() {
+  support.open = false;
+  clearInterval(support.timer);
+  clearInterval(support.badgeTimer);
+  support.thread = null;
+  support.threads = [];
+  support.lines = [];
+  support.lastAt = 0;
+  support.text.clear();
+  setSupportBadge(0);
+  $("supportInput").value = "";
+  if ($("supportModal").open) $("supportModal").close();
+}
+
+const fitSupportInput = () => {
+  const el = $("supportInput");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight + 2, 144) + "px";
+};
+
+$("supportFab").addEventListener("click", openSupportPanel);
+$("supportLink").addEventListener("click", () => {
+  closeModal("accountModal");
+  openSupportPanel();
+});
+$("supportBack").addEventListener("click", showSupportThreads);
+$("supportModalClose").addEventListener("click", () => closeModal("supportModal"));
+$("supportModal").addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeModal("supportModal");
+});
+// however the dialog goes away, stop polling the conversation
+$("supportModal").addEventListener("close", () => {
+  support.open = false;
+  clearInterval(support.timer);
+  refreshSupportBadge();
+});
+
+$("supportInput").addEventListener("input", fitSupportInput);
+$("supportInput").addEventListener("keydown", (e) => {
+  // Enter sends on a keyboard; on touch screens it stays a line break
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+  if (!matchMedia("(hover: hover)").matches) return;
+  e.preventDefault();
+  $("supportForm").requestSubmit();
+});
+
+$("supportForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = $("supportInput");
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.length > SUPPORT_TEXT_MAX) {
+    showToast(`${SUPPORT_TEXT_MAX}文字以内でご入力ください`);
+    return;
+  }
+  const userKey = support.staff ? support.thread?.public_key : support.myKey;
+  if (!userKey || !support.staffKey) return;
+  const btn = $("supportSend");
+  btn.disabled = true;
+  try {
+    const line = await encryptSupportLine(text, userKey, support.staffKey);
+    const saved = await apiCall(supportPath(), { method: "POST", body: line });
+    support.text.set(saved.id, text);
+    input.value = "";
+    fitSupportInput();
+    // pick the new line up from the server, along with anything that crossed it
+    await loadSupportLines(false);
+    await paintSupportLog(true);
+  } catch (err) {
+    showToast(err.status === 429
+      ? "送信が多すぎます。少し時間をおいてください"
+      : "送信できませんでした");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// a tapped notification asks an open window to show the view it points at
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (!e.data || e.data.type !== "open" || e.data.path !== "/support") return;
+    // already on screen: the poll picks the reply up by itself
+    if ($("supportModal").open) return;
+    applyPath("/support");
+  });
+}
 
 // INIT
 (async () => {

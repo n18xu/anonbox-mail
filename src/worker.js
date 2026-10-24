@@ -647,6 +647,99 @@ async function pushToAccount(env, accountId, payload) {
   );
 }
 
+// ===== customer support =====
+// A chat between one account and the support desk, held entirely inside the
+// service: no mail goes out either way, so people can ask for help without
+// handing over any outside address. Each line is encrypted in the browser with a
+// fresh AES key that is wrapped twice, once for the account and once for the
+// support desk, so the server only ever stores ciphertext, exactly as for mail.
+
+// base64 of 4000 characters of UTF-8 (up to 12 KB) plus the GCM tag
+const SUPPORT_CIPHER_MAX = 24000;
+// RSA-2048 output in base64 is 344 characters; leave room for a larger key
+const SUPPORT_KEY_MAX = 1024;
+const SUPPORT_PAGE = 200;
+const SUPPORT_THREADS_MAX = 200;
+// per account, so a single account cannot flood the support desk
+const SUPPORT_BUDGET = { limit: 20, windowMs: 10 * 60 * 1000 };
+
+const isB64 = (s, max) =>
+  typeof s === "string" && s.length > 0 && s.length <= max && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+
+const isAccountId = (s) => typeof s === "string" && /^[a-f0-9-]{36}$/i.test(s);
+
+// the support desk is the same account that may send as admin@; with
+// BROADCAST_ACCOUNT_ID unset there is nobody to talk to
+async function supportDesk(env) {
+  const id = String(env.BROADCAST_ACCOUNT_ID || "").trim();
+  if (!id) return null;
+  return await env.DB.prepare(`SELECT id, public_key FROM accounts WHERE id = ? AND inbox = ?`)
+    .bind(id, ADMIN_INBOX)
+    .first();
+}
+
+// one encrypted line as the browser sends it, or null when anything is off
+function supportLine(body) {
+  if (!body || !isB64(body.iv, 64) || !isB64(body.body, SUPPORT_CIPHER_MAX)) return null;
+  if (!isB64(body.key_user, SUPPORT_KEY_MAX) || !isB64(body.key_staff, SUPPORT_KEY_MAX)) return null;
+  return { iv: body.iv, body: body.body, key_user: body.key_user, key_staff: body.key_staff };
+}
+
+// The VisitorLimiter object only keeps a count and the end of the window, so it
+// serves just as well for counting one account's support messages.
+async function supportLimited(env, accountId) {
+  const counter = env?.VISITOR_LIMITER;
+  if (!counter) return false;
+  const stub = counter.get(counter.idFromName("SUPPORT:" + accountId));
+  return await stub.limit(SUPPORT_BUDGET.limit, SUPPORT_BUDGET.windowMs);
+}
+
+// The lines of one conversation, oldest first, with the key wrapped for whoever
+// is reading. With `after`, only what arrived since; otherwise the latest page.
+async function supportLines(env, accountId, viewer, after) {
+  const keyCol = viewer === "staff" ? "key_staff" : "key_user";
+  const cols = `id, sender, iv, body, ${keyCol} AS key, created_at`;
+  if (Number.isFinite(after)) {
+    const { results } = await env.DB.prepare(
+      `SELECT ${cols} FROM support_messages
+       WHERE account_id = ? AND created_at > ? ORDER BY created_at ASC LIMIT ?`
+    )
+      .bind(accountId, after, SUPPORT_PAGE)
+      .all();
+    return results || [];
+  }
+  const { results } = await env.DB.prepare(
+    `SELECT ${cols} FROM support_messages
+     WHERE account_id = ? ORDER BY created_at DESC LIMIT ?`
+  )
+    .bind(accountId, SUPPORT_PAGE)
+    .all();
+  return (results || []).reverse();
+}
+
+async function insertSupportLine(env, accountId, sender, line) {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO support_messages (id, account_id, sender, iv, body, key_user, key_staff, created_at, read_by_user, read_by_staff)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      id,
+      accountId,
+      sender,
+      line.iv,
+      line.body,
+      line.key_user,
+      line.key_staff,
+      now,
+      sender === "user" ? 1 : 0,
+      sender === "staff" ? 1 : 0
+    )
+    .run();
+  return { id, created_at: now };
+}
+
 // ===== Worker =====
 
 // Receiving a mail is the same work whether it arrived on this account's
@@ -745,6 +838,11 @@ export default {
       ),
       env.DB.prepare(
         `DELETE FROM messages WHERE account_id NOT IN (SELECT id FROM accounts)`
+      ),
+      // support chats follow the same retention as mail
+      env.DB.prepare(`DELETE FROM support_messages WHERE created_at < ?`).bind(cutoff),
+      env.DB.prepare(
+        `DELETE FROM support_messages WHERE account_id NOT IN (SELECT id FROM accounts)`
       ),
       env.DB.prepare(`DELETE FROM login_attempts WHERE first_at < ?`).bind(
         Date.now() - RATE_WINDOW_MS * 4
@@ -1113,6 +1211,7 @@ export default {
             env.DB.prepare(`DELETE FROM push_subscriptions WHERE account_id = ?`).bind(me.account_id),
             env.DB.prepare(`DELETE FROM aliases WHERE account_id = ?`).bind(me.account_id),
             env.DB.prepare(`DELETE FROM messages WHERE account_id = ?`).bind(me.account_id),
+            env.DB.prepare(`DELETE FROM support_messages WHERE account_id = ?`).bind(me.account_id),
             env.DB.prepare(`DELETE FROM sessions WHERE account_id = ?`).bind(me.account_id),
             env.DB.prepare(`DELETE FROM accounts WHERE id = ?`).bind(me.account_id),
           ]);
@@ -1191,6 +1290,132 @@ export default {
           ),
         ]);
         return json({ ok: true });
+      }
+
+      // ----- customer support chat -----
+
+      // how many replies wait unread: the account's own, or every thread's for staff
+      if (path === "/api/support/unread" && req.method === "GET") {
+        if (!me) return err("unauthorized", 401);
+        const staff = isSupportAccount(env, me);
+        const row = staff
+          ? await env.DB.prepare(
+              `SELECT COUNT(*) AS n FROM support_messages WHERE sender = 'user' AND read_by_staff = 0`
+            ).first()
+          : await env.DB.prepare(
+              `SELECT COUNT(*) AS n FROM support_messages
+               WHERE account_id = ? AND sender = 'staff' AND read_by_user = 0`
+            )
+              .bind(me.account_id)
+              .first();
+        return json({ unread: row?.n ?? 0, staff });
+      }
+
+      // the account's own conversation with the support desk
+      if (path === "/api/support" && req.method === "GET") {
+        if (!me) return err("unauthorized", 401);
+        const desk = await supportDesk(env);
+        const mine = await env.DB.prepare(`SELECT public_key FROM accounts WHERE id = ?`)
+          .bind(me.account_id)
+          .first();
+        const after = parseInt(url.searchParams.get("after") || "", 10);
+        const lines = await supportLines(env, me.account_id, "user", after);
+        if (lines.some((l) => l.sender === "staff")) {
+          await env.DB.prepare(
+            `UPDATE support_messages SET read_by_user = 1
+             WHERE account_id = ? AND sender = 'staff' AND read_by_user = 0`
+          )
+            .bind(me.account_id)
+            .run();
+        }
+        return json({
+          available: Boolean(desk),
+          staff: isSupportAccount(env, me),
+          my_key: mine?.public_key || null,
+          staff_key: desk?.public_key || null,
+          messages: lines,
+        });
+      }
+
+      if (path === "/api/support" && req.method === "POST") {
+        if (!me) return err("unauthorized", 401);
+        // the desk answers inside a thread; it has no conversation with itself
+        if (isSupportAccount(env, me)) return err("forbidden", 403);
+        const desk = await supportDesk(env);
+        if (!desk) return err("support is not available", 503);
+        const line = supportLine(await req.json().catch(() => null));
+        if (!line) return err("invalid message");
+        if (await supportLimited(env, me.account_id)) return tooManyAttempts(60);
+        const saved = await insertSupportLine(env, me.account_id, "user", line);
+        ctx.waitUntil(
+          pushToAccount(env, desk.id, {
+            title: "サポートへの問い合わせ",
+            body: "新しいメッセージが届きました",
+            messageId: "support:" + me.account_id,
+            url: "/support",
+          }).catch(() => {})
+        );
+        return json({ ok: true, ...saved }, 201);
+      }
+
+      // the support desk's side: every conversation, newest first
+      if (path === "/api/support/threads" && req.method === "GET") {
+        if (!me) return err("unauthorized", 401);
+        if (!isSupportAccount(env, me)) return err("forbidden", 403);
+        const { results } = await env.DB.prepare(
+          `SELECT s.account_id, a.address, a.public_key,
+                  MAX(s.created_at) AS last_at,
+                  SUM(CASE WHEN s.sender = 'user' AND s.read_by_staff = 0 THEN 1 ELSE 0 END) AS unread
+           FROM support_messages s JOIN accounts a ON a.id = s.account_id
+           GROUP BY s.account_id
+           ORDER BY last_at DESC
+           LIMIT ?`
+        )
+          .bind(SUPPORT_THREADS_MAX)
+          .all();
+        const desk = await supportDesk(env);
+        return json({ threads: results || [], staff_key: desk?.public_key || null });
+      }
+
+      const threadMatch = path.match(/^\/api\/support\/threads\/([^/]+)$/);
+      if (threadMatch) {
+        if (!me) return err("unauthorized", 401);
+        if (!isSupportAccount(env, me)) return err("forbidden", 403);
+        const accountId = threadMatch[1];
+        if (!isAccountId(accountId)) return err("invalid account");
+
+        if (req.method === "GET") {
+          const after = parseInt(url.searchParams.get("after") || "", 10);
+          const lines = await supportLines(env, accountId, "staff", after);
+          if (lines.some((l) => l.sender === "user")) {
+            await env.DB.prepare(
+              `UPDATE support_messages SET read_by_staff = 1
+               WHERE account_id = ? AND sender = 'user' AND read_by_staff = 0`
+            )
+              .bind(accountId)
+              .run();
+          }
+          return json({ messages: lines });
+        }
+
+        if (req.method === "POST") {
+          const target = await env.DB.prepare(`SELECT id FROM accounts WHERE id = ?`)
+            .bind(accountId)
+            .first();
+          if (!target) return err("no such account", 404);
+          const line = supportLine(await req.json().catch(() => null));
+          if (!line) return err("invalid message");
+          const saved = await insertSupportLine(env, accountId, "staff", line);
+          ctx.waitUntil(
+            pushToAccount(env, accountId, {
+              title: "サポートからの返信",
+              body: "運営から返信が届きました",
+              messageId: "support",
+              url: "/support",
+            }).catch(() => {})
+          );
+          return json({ ok: true, ...saved }, 201);
+        }
       }
 
       if (path === "/api/aliases" && req.method === "GET") {
