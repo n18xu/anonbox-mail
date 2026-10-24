@@ -162,9 +162,18 @@ const ADMIN_INBOX = "admin";
 // Holding the admin inbox is not enough to write to every mailbox or to send as
 // the support desk: the operator has to name the exact account in
 // BROADCAST_ACCOUNT_ID. With the var unset - the default - nobody can.
+// STAFF_ACCOUNT_IDS (comma-separated) names further accounts that get the same
+// powers without being the admin inbox; the operator lists each one explicitly.
+const deskAccountId = (env) => String(env.BROADCAST_ACCOUNT_ID || "").trim();
+const extraStaffIds = (env) =>
+  String(env.STAFF_ACCOUNT_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 const isSupportAccount = (env, me) => {
-  const allowed = String(env.BROADCAST_ACCOUNT_ID || "").trim();
-  return Boolean(allowed) && me.inbox === ADMIN_INBOX && me.account_id === allowed;
+  const desk = deskAccountId(env);
+  if (desk && me.inbox === ADMIN_INBOX && me.account_id === desk) return true;
+  return extraStaffIds(env).includes(me.account_id);
 };
 
 const RESERVED_INBOXES = new Set([
@@ -651,8 +660,9 @@ async function pushToAccount(env, accountId, payload) {
 // A chat between one account and the support desk, held entirely inside the
 // service: no mail goes out either way, so people can ask for help without
 // handing over any outside address. Each line is encrypted in the browser with a
-// fresh AES key that is wrapped twice, once for the account and once for the
-// support desk, so the server only ever stores ciphertext, exactly as for mail.
+// fresh AES key that is wrapped for the account and for every staff account
+// (key_staff holds a JSON map of staff account id -> wrapped key), so the server
+// only ever stores ciphertext, exactly as for mail.
 
 // base64 of 4000 characters of UTF-8 (up to 12 KB) plus the GCM tag
 const SUPPORT_CIPHER_MAX = 24000;
@@ -668,21 +678,55 @@ const isB64 = (s, max) =>
 
 const isAccountId = (s) => typeof s === "string" && /^[a-f0-9-]{36}$/i.test(s);
 
-// the support desk is the same account that may send as admin@; with
-// BROADCAST_ACCOUNT_ID unset there is nobody to talk to
-async function supportDesk(env) {
-  const id = String(env.BROADCAST_ACCOUNT_ID || "").trim();
-  if (!id) return null;
-  return await env.DB.prepare(`SELECT id, public_key FROM accounts WHERE id = ? AND inbox = ?`)
-    .bind(id, ADMIN_INBOX)
-    .first();
+// Everyone who answers support: the admin inbox named in BROADCAST_ACCOUNT_ID
+// plus any account in STAFF_ACCOUNT_IDS. Empty means nobody to talk to.
+async function supportStaff(env) {
+  const out = [];
+  const desk = deskAccountId(env);
+  if (desk) {
+    const row = await env.DB.prepare(
+      `SELECT id, address, public_key FROM accounts WHERE id = ? AND inbox = ?`
+    )
+      .bind(desk, ADMIN_INBOX)
+      .first();
+    if (row) out.push(row);
+  }
+  for (const id of extraStaffIds(env)) {
+    if (out.some((s) => s.id === id)) continue;
+    const row = await env.DB.prepare(`SELECT id, address, public_key FROM accounts WHERE id = ?`)
+      .bind(id)
+      .first();
+    if (row) out.push(row);
+  }
+  return out;
 }
 
-// one encrypted line as the browser sends it, or null when anything is off
-function supportLine(body) {
+const staffKeyList = (staff) => staff.map((s) => ({ id: s.id, public_key: s.public_key }));
+
+// One encrypted line as the browser sends it, or null when anything is off. The
+// AES key has to be wrapped for every current staff account, so none of them is
+// left unable to read it.
+function supportLine(body, staff) {
   if (!body || !isB64(body.iv, 64) || !isB64(body.body, SUPPORT_CIPHER_MAX)) return null;
-  if (!isB64(body.key_user, SUPPORT_KEY_MAX) || !isB64(body.key_staff, SUPPORT_KEY_MAX)) return null;
-  return { iv: body.iv, body: body.body, key_user: body.key_user, key_staff: body.key_staff };
+  if (!isB64(body.key_user, SUPPORT_KEY_MAX)) return null;
+  const map = body.key_staff;
+  if (!map || typeof map !== "object" || Array.isArray(map)) return null;
+  const wanted = {};
+  for (const s of staff) {
+    // a staff member the page did not know about yet
+    if (!isB64(map[s.id], SUPPORT_KEY_MAX)) return { stale: true };
+    wanted[s.id] = map[s.id];
+  }
+  return { iv: body.iv, body: body.body, key_user: body.key_user, key_staff: JSON.stringify(wanted) };
+}
+
+// the wrapped key a staff member can open, or null for lines from before they joined
+function staffKeyFor(raw, viewerId) {
+  try {
+    const map = JSON.parse(raw);
+    if (map && typeof map === "object") return map[viewerId] || null;
+  } catch (e) {}
+  return null;
 }
 
 // The VisitorLimiter object only keeps a count and the end of the window, so it
@@ -696,9 +740,11 @@ async function supportLimited(env, accountId) {
 
 // The lines of one conversation, oldest first, with the key wrapped for whoever
 // is reading. With `after`, only what arrived since; otherwise the latest page.
-async function supportLines(env, accountId, viewer, after) {
-  const keyCol = viewer === "staff" ? "key_staff" : "key_user";
+// `staffId` is set when a staff member reads, and picks their key out of the map.
+async function supportLines(env, accountId, staffId, after) {
+  const keyCol = staffId ? "key_staff" : "key_user";
   const cols = `id, sender, iv, body, ${keyCol} AS key, created_at`;
+  let rows;
   if (Number.isFinite(after)) {
     const { results } = await env.DB.prepare(
       `SELECT ${cols} FROM support_messages
@@ -706,15 +752,18 @@ async function supportLines(env, accountId, viewer, after) {
     )
       .bind(accountId, after, SUPPORT_PAGE)
       .all();
-    return results || [];
+    rows = results || [];
+  } else {
+    const { results } = await env.DB.prepare(
+      `SELECT ${cols} FROM support_messages
+       WHERE account_id = ? ORDER BY created_at DESC LIMIT ?`
+    )
+      .bind(accountId, SUPPORT_PAGE)
+      .all();
+    rows = (results || []).reverse();
   }
-  const { results } = await env.DB.prepare(
-    `SELECT ${cols} FROM support_messages
-     WHERE account_id = ? ORDER BY created_at DESC LIMIT ?`
-  )
-    .bind(accountId, SUPPORT_PAGE)
-    .all();
-  return (results || []).reverse();
+  if (staffId) rows.forEach((r) => { r.key = staffKeyFor(r.key, staffId); });
+  return rows;
 }
 
 async function insertSupportLine(env, accountId, sender, line) {
@@ -738,6 +787,72 @@ async function insertSupportLine(env, accountId, sender, line) {
     )
     .run();
   return { id, created_at: now };
+}
+
+// A notice in the recipient's inbox that the chat has something new. The chat
+// text itself is end-to-end encrypted and unreadable here, so the notice only
+// says where to look. It is written by the service, hence the verified mark.
+const SUPPORT_URL = "https://" + DOMAIN + "/support";
+
+function supportNotice(kind, userAddress) {
+  const link = `<p><a href="${SUPPORT_URL}">サポートを開く</a></p>`;
+  const note = "メッセージの内容は暗号化されているため、このお知らせには含まれません。";
+  if (kind === "reply") {
+    return {
+      subject: "サポートから返信が届きました",
+      text: `AnonBox 運営からサポートチャットに返信が届きました。\n\n右下の「サポート」ボタン、または次のページで内容をご確認ください。\n${SUPPORT_URL}\n\n${note}`,
+      html: `<p>AnonBox 運営からサポートチャットに返信が届きました。</p><p>右下の「サポート」ボタン、または次のリンクから内容をご確認ください。</p>${link}<p style="color:#5f6368;font-size:12px">${note}</p>`,
+      attachments: [],
+    };
+  }
+  return {
+    subject: `サポートへの問い合わせ: ${userAddress}`,
+    text: `${userAddress} からサポートチャットに問い合わせが届きました。\n\n右下の「サポート」ボタン、または次のページで内容をご確認ください。\n${SUPPORT_URL}\n\n${note}`,
+    html: `<p><strong>${userAddress}</strong> からサポートチャットに問い合わせが届きました。</p><p>右下の「サポート」ボタン、または次のリンクから内容をご確認ください。</p>${link}<p style="color:#5f6368;font-size:12px">${note}</p>`,
+    attachments: [],
+  };
+}
+
+async function deliverSupportNotice(env, recipient, kind, userAddress) {
+  try {
+    const from = { address: ADMIN_INBOX + "@" + DOMAIN, name: ADMIN_NAME + " サポート" };
+    const encrypted = await encryptMailForAccount(
+      recipient.public_key,
+      supportNotice(kind, userAddress),
+      from,
+      recipient.address
+    );
+    await env.DB.prepare(
+      `INSERT INTO messages (id, account_id, encrypted_aes_key, meta_iv, meta_encrypted, body_iv, body_encrypted, received_at, official)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
+    )
+      .bind(
+        crypto.randomUUID(),
+        recipient.id,
+        encrypted.encrypted_aes_key,
+        encrypted.meta_iv,
+        encrypted.meta_encrypted,
+        encrypted.body_iv,
+        encrypted.body_encrypted,
+        Date.now()
+      )
+      .run();
+  } catch (e) {
+    // the chat line is already saved; a missing notice must not fail the send
+    console.error("support notice failed", e?.message || String(e));
+  }
+}
+
+// One notice per burst: only when the other side has nothing unread from this
+// sender yet, so ten quick lines do not leave ten mails behind.
+async function needsSupportNotice(env, accountId, sender) {
+  const readCol = sender === "user" ? "read_by_staff" : "read_by_user";
+  const row = await env.DB.prepare(
+    `SELECT 1 AS x FROM support_messages WHERE account_id = ? AND sender = ? AND ${readCol} = 0 LIMIT 1`
+  )
+    .bind(accountId, sender)
+    .first();
+  return !row;
 }
 
 // ===== Worker =====
@@ -1314,12 +1429,12 @@ export default {
       // the account's own conversation with the support desk
       if (path === "/api/support" && req.method === "GET") {
         if (!me) return err("unauthorized", 401);
-        const desk = await supportDesk(env);
+        const staff = await supportStaff(env);
         const mine = await env.DB.prepare(`SELECT public_key FROM accounts WHERE id = ?`)
           .bind(me.account_id)
           .first();
         const after = parseInt(url.searchParams.get("after") || "", 10);
-        const lines = await supportLines(env, me.account_id, "user", after);
+        const lines = await supportLines(env, me.account_id, null, after);
         if (lines.some((l) => l.sender === "staff")) {
           await env.DB.prepare(
             `UPDATE support_messages SET read_by_user = 1
@@ -1329,10 +1444,10 @@ export default {
             .run();
         }
         return json({
-          available: Boolean(desk),
+          available: staff.length > 0,
           staff: isSupportAccount(env, me),
           my_key: mine?.public_key || null,
-          staff_key: desk?.public_key || null,
+          staff_keys: staffKeyList(staff),
           messages: lines,
         });
       }
@@ -1341,20 +1456,26 @@ export default {
         if (!me) return err("unauthorized", 401);
         // the desk answers inside a thread; it has no conversation with itself
         if (isSupportAccount(env, me)) return err("forbidden", 403);
-        const desk = await supportDesk(env);
-        if (!desk) return err("support is not available", 503);
-        const line = supportLine(await req.json().catch(() => null));
+        const staff = await supportStaff(env);
+        if (!staff.length) return err("support is not available", 503);
+        const line = supportLine(await req.json().catch(() => null), staff);
         if (!line) return err("invalid message");
+        // the page's staff list is out of date: it reloads it and tries again
+        if (line.stale) return err("staff changed", 409);
         if (await supportLimited(env, me.account_id)) return tooManyAttempts(60);
+        const notify = await needsSupportNotice(env, me.account_id, "user");
         const saved = await insertSupportLine(env, me.account_id, "user", line);
-        ctx.waitUntil(
-          pushToAccount(env, desk.id, {
-            title: "サポートへの問い合わせ",
-            body: "新しいメッセージが届きました",
-            messageId: "support:" + me.account_id,
-            url: "/support",
-          }).catch(() => {})
-        );
+        for (const s of staff) {
+          if (notify) ctx.waitUntil(deliverSupportNotice(env, s, "inquiry", me.address));
+          ctx.waitUntil(
+            pushToAccount(env, s.id, {
+              title: "サポートへの問い合わせ",
+              body: "新しいメッセージが届きました",
+              messageId: "support:" + me.account_id,
+              url: "/support",
+            }).catch(() => {})
+          );
+        }
         return json({ ok: true, ...saved }, 201);
       }
 
@@ -1373,8 +1494,8 @@ export default {
         )
           .bind(SUPPORT_THREADS_MAX)
           .all();
-        const desk = await supportDesk(env);
-        return json({ threads: results || [], staff_key: desk?.public_key || null });
+        const staff = await supportStaff(env);
+        return json({ threads: results || [], staff_keys: staffKeyList(staff) });
       }
 
       const threadMatch = path.match(/^\/api\/support\/threads\/([^/]+)$/);
@@ -1386,7 +1507,7 @@ export default {
 
         if (req.method === "GET") {
           const after = parseInt(url.searchParams.get("after") || "", 10);
-          const lines = await supportLines(env, accountId, "staff", after);
+          const lines = await supportLines(env, accountId, me.account_id, after);
           if (lines.some((l) => l.sender === "user")) {
             await env.DB.prepare(
               `UPDATE support_messages SET read_by_staff = 1
@@ -1399,13 +1520,16 @@ export default {
         }
 
         if (req.method === "POST") {
-          const target = await env.DB.prepare(`SELECT id FROM accounts WHERE id = ?`)
+          const target = await env.DB.prepare(`SELECT id, address, public_key FROM accounts WHERE id = ?`)
             .bind(accountId)
             .first();
           if (!target) return err("no such account", 404);
-          const line = supportLine(await req.json().catch(() => null));
+          const line = supportLine(await req.json().catch(() => null), await supportStaff(env));
           if (!line) return err("invalid message");
+          if (line.stale) return err("staff changed", 409);
+          const notify = await needsSupportNotice(env, accountId, "staff");
           const saved = await insertSupportLine(env, accountId, "staff", line);
+          if (notify) ctx.waitUntil(deliverSupportNotice(env, target, "reply", target.address));
           ctx.waitUntil(
             pushToAccount(env, accountId, {
               title: "サポートからの返信",

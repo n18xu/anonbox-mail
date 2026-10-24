@@ -3029,7 +3029,7 @@ const support = {
   staff: false,
   available: false,
   myKey: null,
-  staffKey: null,
+  staffKeys: [],
   thread: null,    // staff only: the conversation being read
   threads: [],
   lines: [],
@@ -3040,7 +3040,8 @@ const support = {
 const importRsaPublicKey = (b64) =>
   crypto.subtle.importKey("spki", b64ToBytes(b64), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
 
-async function encryptSupportLine(text, userKeyB64, staffKeyB64) {
+// staffKeys: [{ id, public_key }] for every staff account, each gets its own wrap
+async function encryptSupportLine(text, userKeyB64, staffKeys) {
   const aes = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
   const raw = new Uint8Array(await crypto.subtle.exportKey("raw", aes));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -3051,18 +3052,21 @@ async function encryptSupportLine(text, userKeyB64, staffKeyB64) {
     bytesToB64(new Uint8Array(
       await crypto.subtle.encrypt({ name: "RSA-OAEP" }, await importRsaPublicKey(keyB64), raw)
     ));
+  const keyStaff = {};
+  for (const s of staffKeys) keyStaff[s.id] = await wrapFor(s.public_key);
   return {
     iv: bytesToB64(iv),
     body: bytesToB64(body),
     key_user: await wrapFor(userKeyB64),
-    key_staff: await wrapFor(staffKeyB64),
+    key_staff: keyStaff,
   };
 }
 
 async function supportText(line) {
   if (support.text.has(line.id)) return support.text.get(line.id);
   let text = null;
-  try {
+  // no key: a line from before this staff account was added
+  if (line.key) try {
     const aesKey = await decryptAesKey(state.privateKey, line.key);
     text = await aesDecrypt(aesKey, line.iv, line.body);
   } catch (e) {}
@@ -3151,7 +3155,7 @@ async function loadSupportLines(full) {
 async function refreshSupportThreads() {
   const data = await apiCall("/support/threads");
   if (!support.open || support.thread) return;
-  support.staffKey = data.staff_key || support.staffKey;
+  if (Array.isArray(data.staff_keys)) support.staffKeys = data.staff_keys;
   support.threads = data.threads || [];
   const box = $("supportThreads");
   if (!support.threads.length) {
@@ -3196,7 +3200,7 @@ async function openSupportThread(t) {
   $("supportThreads").classList.add("hidden");
   $("supportLog").classList.remove("hidden");
   setSupportIntro("読み込んでいます…");
-  showSupportCompose(Boolean(support.staffKey && t.public_key));
+  showSupportCompose(Boolean(support.staffKeys.length && t.public_key));
   try {
     const { changed } = await loadSupportLines(true);
     if (changed) await paintSupportLog(true);
@@ -3242,14 +3246,14 @@ async function openSupportPanel() {
     support.staff = Boolean(data.staff);
     support.available = Boolean(data.available);
     support.myKey = data.my_key || null;
-    support.staffKey = data.staff_key || null;
+    support.staffKeys = Array.isArray(data.staff_keys) ? data.staff_keys : [];
     if (support.staff) {
       await showSupportThreads();
       return;
     }
     support.lines = data.messages || [];
     if (support.lines.length) support.lastAt = support.lines[support.lines.length - 1].created_at;
-    showSupportCompose(support.available && Boolean(support.myKey && support.staffKey));
+    showSupportCompose(support.available && Boolean(support.myKey && support.staffKeys.length));
     setSupportBadge(0);
     await paintSupportLog(true);
     if (!$("supportForm").classList.contains("hidden") && matchMedia("(hover: hover)").matches) {
@@ -3322,12 +3326,22 @@ $("supportForm").addEventListener("submit", async (e) => {
     return;
   }
   const userKey = support.staff ? support.thread?.public_key : support.myKey;
-  if (!userKey || !support.staffKey) return;
+  if (!userKey || !support.staffKeys.length) return;
   const btn = $("supportSend");
   btn.disabled = true;
   try {
-    const line = await encryptSupportLine(text, userKey, support.staffKey);
-    const saved = await apiCall(supportPath(), { method: "POST", body: line });
+    const send = async () =>
+      apiCall(supportPath(), { method: "POST", body: await encryptSupportLine(text, userKey, support.staffKeys) });
+    let saved;
+    try {
+      saved = await send();
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      // a staff account was added since this page loaded: fetch the list, wrap again
+      const fresh = await apiCall(support.staff ? "/support/threads" : "/support");
+      support.staffKeys = Array.isArray(fresh.staff_keys) ? fresh.staff_keys : [];
+      saved = await send();
+    }
     support.text.set(saved.id, text);
     input.value = "";
     fitSupportInput();
